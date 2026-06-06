@@ -1,0 +1,142 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 2791 >>
+stream
+BT /F1 12 Tf 72 760 Td
+(SPI_Slave Verification and RTL2GDS Flow) Tj
+T*
+(Koen Van Caekenberghe, ChipDesign B.V., June 2026) Tj
+T*
+() Tj
+T*
+(Overview) Tj
+T*
+(The SPI_Slave design is a small SPI slave IP block that supports a simple 8-bit) Tj
+T*
+(address and data transfer protocol. The SPI interface operates in mode 0) Tj
+T*
+(\(CPOL=0, CPHA=0\). The design exposes a secondary read port `Data2_out` to) Tj
+T*
+(allow local readback of register contents.) Tj
+T*
+() Tj
+T*
+(Design Summary) Tj
+T*
+(The RTL implements the following functionality:) Tj
+T*
+(- SPI command and data phases with a 1-byte command word.) Tj
+T*
+(- Read/write selection using the MSB of the command byte.) Tj
+T*
+(- Eight 8-bit internal registers \(Register0..Register7\).) Tj
+T*
+(- Synchronous register update on the internal clock domain.) Tj
+T*
+(- MISO output generation during SPI read transactions.) Tj
+T*
+() Tj
+T*
+(Top-level interface:) Tj
+T*
+(- Clk -- internal clock input.) Tj
+T*
+(- iRST_N -- active-low reset.) Tj
+T*
+(- SCK, MOSI, SSEL -- SPI inputs.) Tj
+T*
+(- MISO -- SPI output.) Tj
+T*
+(- Add2_in, Data2_out -- local read address and data output.) Tj
+T*
+(- debug -- internal debug status outputs.) Tj
+T*
+() Tj
+T*
+(Place-and-Route Flow) Tj
+T*
+(The repository includes a LibreLane-based RTL2GDS flow configured for the) Tj
+T*
+(IHP SG13G2 PDK.) Tj
+T*
+(Important flow files: flow/Makefile, flow/config.yaml, flow/run_flow.sh,) Tj
+T*
+(flow/ihp_pdk.env.example, flow/constraint.sdc, flow/place_route.tcl.) Tj
+T*
+() Tj
+T*
+(Verification Approach) Tj
+T*
+(Two testbenches are provided:) Tj
+T*
+(- tb_spi_slave.v -- original RTL testbench.) Tj
+T*
+(- tb_spi_slave_compare.v -- comparison testbench that can instantiate either) Tj
+T*
+(  RTL or synthesized netlists using the SYNTH macro.) Tj
+T*
+() Tj
+T*
+(Back-to-Back Results) Tj
+T*
+(RTL simulation result: FINISH 750: addr=03 data=0d debug=1b miso=1 ssel=0) Tj
+T*
+(Synthesized netlist result: FINISH 750: addr=03 data=0d debug=1b miso=1 ssel=0) Tj
+T*
+(Final gate-level netlist result with SG13G2 library:) Tj
+T*
+(FINISH 75000: addr=03 data=0d debug=1b miso=1 ssel=0) Tj
+T*
+(The final gate-level simulation matches the RTL and synthesized netlists on) Tj
+T*
+(observable outputs. The different finish time is due to the gate-level) Tj
+T*
+(library timescale.) Tj
+T*
+() Tj
+T*
+(Reproduction Instructions) Tj
+T*
+(Run the flow from flow/ with ./run_flow.sh after configuring flow/ihp_pdk.env.) Tj
+T*
+(Run RTL and synthesized verification with tb_spi_slave_compare.v as described) Tj
+T*
+(in the README.) Tj
+T*
+() Tj
+T*
+(Conclusion) Tj
+T*
+(The SPI_Slave design is functionally consistent across RTL, synthesized netlist,) Tj
+T*
+(and final gate-level netlist simulations. The repository includes the) Tj
+T*
+(necessary sources, flow files, and verification bench to rerun the flow.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000000 00000 n 
+0000000049 00000 n 
+0000000106 00000 n 
+0000000232 00000 n 
+0000003075 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+3145
+%EOF

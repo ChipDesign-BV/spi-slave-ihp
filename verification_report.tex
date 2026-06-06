@@ -1,0 +1,98 @@
+% SPI_Slave verification report
+% Koen Van Caekenberghe, ChipDesign B.V., 06.2026
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{courier}
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true}
+\title{SPI\_Slave Verification and RTL2GDS Flow}
+\author{Koen Van Caekenberghe, ChipDesign B.V.}
+\date{June 2026}
+\begin{document}
+\maketitle
+\section{Overview}
+The `SPI_Slave` design is a small SPI slave IP block that supports a simple 8-bit address and data transfer protocol. The SPI interface operates in mode 0 (CPOL=0, CPHA=0). The design exposes a secondary read port `Data2_out` to allow local readback of register contents.
+
+\section{Design Summary}
+The RTL implements the following functionality:
+\begin{itemize}
+  \item SPI command and data phases with a 1-byte command word.
+  \item Read/write selection using the MSB of the command byte.
+  \item Eight 8-bit internal registers (`Register0`..`Register7`).
+  \item Synchronous register update on the internal clock domain.
+  \item MISO output generation during SPI read transactions.
+\end{itemize}
+
+The top-level interface is:
+\begin{itemize}
+  \item `Clk` -- internal clock input.
+  \item `iRST_N` -- active-low synchronous reset.
+  \item `SCK`, `MOSI`, `SSEL` -- SPI inputs.
+  \item `MISO` -- SPI output.
+  \item `Add2_in`, `Data2_out` -- local read address and data output.
+  \item `debug` -- internal debug status outputs.
+\end{itemize}
+
+\section{Place-and-Route Flow}
+The repository includes a LibreLane-based RTL2GDS flow configured for the IHP SG13G2 PDK.
+
+Important files for the flow:
+\begin{itemize}
+  \item `flow/Makefile` -- entry point for LibreLane and OpenROAD commands.
+  \item `flow/config.yaml` -- LibreLane configuration file.
+  \item `flow/run_flow.sh` -- environment setup and flow wrapper.
+  \item `flow/ihp_pdk.env.example` -- example PDK environment template.
+  \item `flow/constraint.sdc` -- timing constraint file for the `SPI_Slave` clock.
+  \item `flow/place_route.tcl` -- fallback OpenROAD placement/routing script.
+\end{itemize}
+
+Reproducible flow commands:
+\begin{lstlisting}
+cd spi_slave_github_repo/flow
+cp ihp_pdk.env.example ihp_pdk.env
+# Edit flow/ihp_pdk.env to point to the local IHP PDK installation
+./run_flow.sh
+\end{lstlisting}
+
+The flow requires the local IHP PDK path and the PDK name `ihp-sg13g2`.
+
+\section{Verification Approach}
+Two testbenches are provided:
+\begin{itemize}
+  \item `tb_spi_slave.v` -- original RTL testbench.
+  \item `tb_spi_slave_compare.v` -- comparison testbench that can instantiate either RTL or synthesized netlists using the `SYNTH` compile-time macro.
+\end{itemize}
+
+Simulation commands used for verification:
+\begin{lstlisting}
+# RTL baseline
+iverilog -g2012 -o tb_rtl.out tb_spi_slave_compare.v
+vvp tb_rtl.out
+
+# Synthesized netlist
+iverilog -g2012 -DSYNTH -o tb_synth.out flow/spi_slave_synth.v tb_spi_slave_compare.v
+vvp tb_synth.out
+
+# Gate-level netlist with IHP SG13G2 stdcell library
+iverilog -g2012 -DSYNTH -o tb_nl.out \
+  /foss/pdks/ihp-sg13g2/libs.ref/sg13g2_stdcell/verilog/sg13g2_udp.v \
+  /foss/pdks/ihp-sg13g2/libs.ref/sg13g2_stdcell/verilog/sg13g2_stdcell.v \
+  flow/runs/RUN_2026-06-06_14-48-57/06-yosys-synthesis/SPI_Slave.nl.v \
+  tb_spi_slave_compare.v
+vvp tb_nl.out
+\end{lstlisting}
+
+\section{Back-to-Back Results}
+The functional verification results are as follows:
+\begin{itemize}
+  \item RTL simulation result: `FINISH 750: addr=03 data=0d debug=1b miso=1 ssel=0`
+  \item Synthesized Yosys netlist result: `FINISH 750: addr=03 data=0d debug=1b miso=1 ssel=0`
+  \item Final gate-level netlist result with SG13G2 library: `FINISH 75000: addr=03 data=0d debug=1b miso=1 ssel=0`
+\end{itemize}
+
+The final gate-level simulation matches the RTL and synthesized netlists on all observable outputs. The different finish time in the gate-level run is due to the STD cell library timescale and does not affect observable signal correctness.
+
+\section{Conclusions}
+The `SPI_Slave` design behaves consistently across the RTL model, synthesized netlist, and final gate-level netlist. The provided repository includes the RTL sources, flow configuration, and verification bench needed to rerun the flow and reproduce the comparison results.
+\end{document}

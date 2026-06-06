@@ -1,0 +1,13 @@
+# Yosys synthesis script for SPI_Slave.
+# This script performs RTL elaboration and generates a synthesized netlist.
+# If an IHP Liberty file is available, enable the ABC step by setting IHP_STD_CELL_LIB in ihp_pdk.env.
+
+read_verilog ../spi_slave.v
+hierarchy -top SPI_Slave
+proc; opt; fsm; opt; techmap; opt
+
+# Uncomment the following line when the IHP standard cell Liberty file is configured:
+# abc -liberty $env(IHP_STD_CELL_LIB)
+
+write_verilog spi_slave_synth.v
+write_json spi_slave_synth.json

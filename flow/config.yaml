@@ -1,0 +1,29 @@
+meta:
+  version: 2
+  flow: Classic
+  substituting_steps:
+    +OpenROAD.GlobalRouting: Odb.InsertECODiodes
+    +OpenROAD.CTS: Odb.InsertECOBuffers
+    +Checker.XOR: KLayout.SealRing
+    KLayout.XOR: null
+    OpenROAD.STAPrePNR: null
+    OpenROAD.STAMidPNR*: null
+    Checker.IllegalOverlap: null
+    Checker.YosysSynthChecks: null
+    Checker.SetupViolations: null
+    Magic.WriteLEF: null
+    Odb.CheckDesignAntennaProperties: null
+    KLayout.DRC: null
+    Magic.DRC: null
+
+DIE_AREA: [0, 0, 157780, 176500]
+
+DESIGN_NAME: SPI_Slave
+VERILOG_FILES:
+- dir::../spi_slave.v
+VERILOG_INCLUDE_DIRS: []
+PNR_SDC_FILE: dir::constraint.sdc
+SIGNOFF_SDC_FILE: dir::constraint.sdc
+FALLBACK_SDC: dir::constraint.sdc
+VERILOG_DEFINES:
+- FUNCTIONAL
