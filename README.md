@@ -39,7 +39,7 @@ synchroniser before entering the system-clock domain.
 spi_slave.v                  RTL source
 spi_slave.gds                Final GDS (IHP SG13G2, with seal ring)
 spi_slave.def                Final DEF
-tb_spi_slave.v               RTL testbench (two SPI transactions)
+tb_spi_slave.v               RTL testbench (three SPI transactions: read, write, read-back)
 tb_spi_slave_compare.v       B2B testbench (RTL vs synthesised netlist)
 gen_waveforms.py             VCD parser and waveform PNG generator
 waveform_rtl.png             RTL simulation waveform
@@ -71,22 +71,29 @@ iverilog -g2012 -o tb_rtl.out tb_spi_slave.v
 vvp tb_rtl.out                    # produces tb_spi_slave.vcd
 ```
 
+Expected output:
+
+```
+PASS 1100: miso_rx1=0x0B data=0xFF miso_rx3=0xFF debug=0x1F
+```
+
 ### Back-to-back (RTL vs synthesised netlist)
 
 ```bash
 # RTL
-iverilog -g2012 -o tb_rtl.out tb_spi_slave_compare.v
-vvp tb_rtl.out
+iverilog -g2012 -o tb_cmp_rtl.out tb_spi_slave_compare.v
+vvp tb_cmp_rtl.out                # produces tb_spi_slave_compare.vcd
 
 # Synthesised netlist (Yosys generic cells, no PDK library needed)
-iverilog -g2012 -DSYNTH -o tb_synth.out flow/spi_slave_synth.v tb_spi_slave_compare.v
-vvp tb_synth.out
+iverilog -g2012 -DSYNTH -o tb_cmp_syn.out flow/spi_slave_synth.v tb_spi_slave_compare.v
+vvp tb_cmp_syn.out                # produces tb_spi_slave_synth.vcd
 ```
 
 Both should print:
 
 ```
-FINISH                750000: addr=03 data=ff debug=1f miso=1 ssel=0
+FINISH 1100: miso_rx1=0x0B data=0xFF miso_rx3=0xFF debug=0x1F
+PASS: all checks passed
 ```
 
 ### Generate waveform images
@@ -129,9 +136,9 @@ Verified inside the **IIC-OSIC-TOOLS** Docker/WSL2 container
 | IHP PDK | ihp-sg13g2 (open release) |
 
 > **Note:** A bug in the librelane `ihp_seal_ring.py` script (use of the
-> deprecated `create_cell` KLayout API and missing nm→µm unit conversion) is
-> patched automatically when using the `run_flow.sh` in this repo — see
-> `flow/ihp_pdk.env` for details.
+> deprecated `create_cell` KLayout API and missing nm→µm unit conversion)
+> must be patched manually in the installed librelane package — see
+> `flow/README.md` for the exact patch.
 
 ### Flow results
 
@@ -154,15 +161,24 @@ All output signals are bit-for-bit identical between RTL and synthesised netlist
 | Signal | RTL | Synth | |
 |---|---|---|---|
 | `rst_n` | 1 | 1 | ✓ |
-| `ssel` | 0 | 0 | ✓ |
+| `ssel` | 1 | 1 | ✓ |
 | `sck` | 0 | 0 | ✓ |
 | `mosi` | 1 | 1 | ✓ |
 | `miso` | 1 | 1 | ✓ |
 | `data` | 0xFF | 0xFF | ✓ |
 | `debug` | 0x1F | 0x1F | ✓ |
+| `miso_rx1` | 0x0B | 0x0B | ✓ |
+| `miso_rx3` | 0xFF | 0xFF | ✓ |
 
-`debug=0x1F` confirms all five FSM states (IDLE, COMMAND, WRITE, READ, END)
-were visited.  See `verification_report.pdf` for waveforms and full analysis.
+`miso_rx1=0x0B` is Register 1's reset value read via SPI in Tx1.
+`miso_rx3=0xFF` is the write-confirmation: Tx3 read back the 0xFF written by Tx2.
+`debug=0x1F` confirms all five FSM states (IDLE, COMMAND, WRITE, READ, END) were visited.
+
+![RTL simulation waveform — three transactions over 1200 ns](waveform_rtl.png)
+
+![B2B overlay: RTL (blue) vs synthesised netlist (red dashed) — traces overlap completely](waveform_b2b.png)
+
+See `verification_report.pdf` for full analysis.
 
 ---
 

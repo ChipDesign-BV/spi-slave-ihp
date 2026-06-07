@@ -128,53 +128,57 @@ The flow ran all 69 steps and completed with warnings only (no errors). A patch 
 \subsection{Methodology}
 Back-to-back (B2B) verification confirms functional equivalence between the RTL source (\texttt{spi\_slave.v}) and the Yosys-synthesised netlist (\texttt{spi\_slave\_synth.v}, in \texttt{flow/}). Both receive identical stimulus and their outputs are compared.
 
-The testbench \texttt{tb\_spi\_slave.v} drives two SPI transactions:
+Three SPI transactions are exercised to confirm both read and write behaviour:
 \begin{enumerate}
-  \item \textbf{READ} from Register\,1 (address byte \texttt{0x81}: R/\=W\,=\,1, addr\,=\,\texttt{0x01}). The default reset value \texttt{0x0B} is expected on MISO.
-  \item \textbf{WRITE} \texttt{0xFF} to Register\,3 (address byte \texttt{0x03}: R/\=W\,=\,0, addr\,=\,\texttt{0x03}).
+  \item \textbf{Tx1 READ} Register\,1 (address byte \texttt{0x81}: R/\=W\,=\,1, addr\,=\,\texttt{0x01}). Expected on MISO: \texttt{0x0B} (reset value). Verifies the read path.
+  \item \textbf{Tx2 WRITE} \texttt{0xFF} to Register\,7 (address byte \texttt{0x07}: R/\=W\,=\,0, addr\,=\,\texttt{0x07}).
+  \item \textbf{Tx3 READ} Register\,7 (address byte \texttt{0x87}: R/\=W\,=\,1, addr\,=\,\texttt{0x07}). Expected on MISO: \texttt{0xFF}. Confirms that Tx2 was committed to the register file.
 \end{enumerate}
 
-The same testbench is compiled twice: once against the RTL (\texttt{spi\_slave.v}) and once with the synthesised netlist substituted in place of the \texttt{`include}.
+Each testbench is self-checking: captured MISO bytes and the parallel-port output are compared against expected values with \texttt{\$display} pass/fail reporting. The testbenches are compiled twice (RTL and synthesised netlist) using a \texttt{`ifndef SYNTH} guard.
 
 \subsection{Simulation Commands}
 \begin{lstlisting}
-# RTL simulation
+# RTL simulation (tb_spi_slave.v — self-checking, 3 transactions)
 iverilog -g2012 -o tb_rtl.out tb_spi_slave.v
-vvp tb_rtl.out          # produces tb_spi_slave.vcd
+vvp tb_rtl.out          # PASS printed to stdout; produces tb_spi_slave.vcd
 
-# Synthesised netlist simulation (replace include at compile time)
-sed 's|`include "spi_slave.v"|`include "flow/spi_slave_synth.v"|g' \
-    tb_spi_slave.v \
-  | sed 's|tb_spi_slave.vcd|tb_spi_slave_synth.vcd|g' \
-  > tb_spi_slave_synth_run.v
-iverilog -g2012 -o tb_synth.out tb_spi_slave_synth_run.v
-vvp tb_synth.out  # produces tb_spi_slave_synth.vcd
+# B2B comparison — RTL
+iverilog -g2012 -o tb_cmp_rtl.out tb_spi_slave_compare.v
+vvp tb_cmp_rtl.out      # produces tb_spi_slave_compare.vcd
+
+# B2B comparison — synthesised netlist (-DSYNTH skips `include)
+iverilog -g2012 -DSYNTH -o tb_cmp_syn.out \
+    flow/spi_slave_synth.v tb_spi_slave_compare.v
+vvp tb_cmp_syn.out      # produces tb_spi_slave_synth.vcd
 \end{lstlisting}
 
 \subsection{Results}
 
-All observed signal values at the end of simulation (t\,=\,750\,ns) were identical between RTL and synthesised netlist:
+All nine observed signal values at the end of simulation (t\,=\,1100\,ns) were identical between RTL and synthesised netlist:
 
 \begin{center}
 \begin{tabular}{llll}
 \toprule
 Signal & RTL & Synth & Status \\
 \midrule
-\texttt{rst\_n}  & 1    & 1    & MATCH \\
-\texttt{ssel}    & 0    & 0    & MATCH \\
-\texttt{sck}     & 0    & 0    & MATCH \\
-\texttt{mosi}    & 1    & 1    & MATCH \\
-\texttt{miso}    & 1    & 1    & MATCH \\
-\texttt{data}    & \texttt{0xFF} & \texttt{0xFF} & MATCH \\
-\texttt{debug}   & \texttt{0x1F} & \texttt{0x1F} & MATCH \\
+\texttt{rst\_n}    & 1             & 1             & MATCH \\
+\texttt{ssel}      & 1             & 1             & MATCH \\
+\texttt{sck}       & 0             & 0             & MATCH \\
+\texttt{mosi}      & 1             & 1             & MATCH \\
+\texttt{miso}      & 1             & 1             & MATCH \\
+\texttt{data}      & \texttt{0xFF} & \texttt{0xFF} & MATCH \\
+\texttt{debug}     & \texttt{0x1F} & \texttt{0x1F} & MATCH \\
+\texttt{miso\_rx1} & \texttt{0x0B} & \texttt{0x0B} & MATCH \\
+\texttt{miso\_rx3} & \texttt{0xFF} & \texttt{0xFF} & MATCH \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The \texttt{debug} value \texttt{0x1F} (bits\,0--4 all set) confirms that all five state-machine states (IDLE, COMMAND, WRITE, READ, END) were visited during the simulation. The \texttt{data} output \texttt{0xFF} confirms the WRITE transaction successfully stored \texttt{0xFF} in Register\,3, which is then reflected on the parallel read port (\texttt{Add2\_in}\,=\,3). The \texttt{miso} value 1 corresponds to the LSB of Register\,1 (\texttt{0x0B}), which was the last bit shifted out during the READ transaction.
+\texttt{miso\_rx1\,=\,0x0B} confirms the Tx1 READ returned Register\,1's reset value. \texttt{miso\_rx3\,=\,0xFF} is the definitive write confirmation: Tx3 READ of Register\,7 via SPI returned exactly the value written by Tx2. \texttt{data\,=\,0xFF} shows the same value on the parallel read port (Add2\_in\,=\,7 after the write). \texttt{debug\,=\,0x1F} (bits\,0--4 all set) confirms all five FSM states (IDLE, COMMAND, WRITE, READ, END) were visited.
 
 \subsection{RTL Simulation Waveform}
-Figure~\ref{fig:rtl_wave} shows the key SPI signals, parallel data output, and debug register over the full 750\,ns simulation. The two SPI transactions are visible: the READ phase (Tx1, green background) in which MISO carries Register\,1's value, followed by the WRITE phase (Tx2, orange background) in which MOSI carries \texttt{0xFF} to Register\,3.
+Figure~\ref{fig:rtl_wave} shows the key SPI signals, parallel data output, and debug register over the full 1200\,ns simulation. Three transactions are visible: Tx1 READ (green), Tx2 WRITE (orange), and Tx3 READ confirming the write (blue). \texttt{data} transitions from \texttt{0x0D} to \texttt{0xFF} at the end of Tx2 and holds that value through Tx3.
 
 \begin{figure}[H]
   \centering
@@ -184,7 +188,7 @@ Figure~\ref{fig:rtl_wave} shows the key SPI signals, parallel data output, and d
 \end{figure}
 
 \subsection{B2B Overlay Waveform}
-Figure~\ref{fig:b2b_wave} overlays the RTL (blue, solid) and synthesised-netlist (red, dashed) waveforms for the output signals. The traces are indistinguishable, confirming functional equivalence.
+Figure~\ref{fig:b2b_wave} overlays the RTL (blue, solid) and synthesised-netlist (red, dashed) waveforms for the output and captured-result signals. \texttt{miso\_rx1} and \texttt{miso\_rx3} are the bytes assembled by the testbench from the MISO stream. The traces are indistinguishable, confirming functional equivalence including the write-confirmation read-back.
 
 \begin{figure}[H]
   \centering
@@ -199,7 +203,7 @@ Figure~\ref{fig:b2b_wave} overlays the RTL (blue, solid) and synthesised-netlist
 
 The \texttt{spi\_slave} design has been verified at two levels:
 \begin{itemize}
-  \item \textbf{Functional correctness}: Both a register read and a register write transaction were exercised in simulation, producing the expected MISO output and register update.
+  \item \textbf{Functional correctness}: A register read (Tx1), a register write (Tx2), and a read-back of the written register (Tx3) were all exercised. The SPI read-back \texttt{miso\_rx3\,=\,0xFF} directly confirms that Tx2 was committed to the register file.
   \item \textbf{Synthesis equivalence}: All observable output signals are bit-for-bit identical between the RTL model and the Yosys-generated structural netlist, confirming that synthesis introduced no functional changes.
 \end{itemize}
 

@@ -1,4 +1,4 @@
-"""Parse two VCD files (RTL and synth), compare key signals, and save waveform PNGs."""
+"""Parse VCD files, compare signals, and save waveform PNGs."""
 import re
 import matplotlib
 matplotlib.use("Agg")
@@ -28,7 +28,7 @@ def parse_vcd(path):
 
     for m in re.finditer(r'\$var\s+\w+\s+(\d+)\s+(\S+)\s+([\w\[\]:]+)', text):
         width, vid, raw_name = int(m.group(1)), m.group(2), m.group(3)
-        name = re.sub(r'\[.*\]$', '', raw_name)   # strip "[7:0]" suffix
+        name = re.sub(r'\[.*\]$', '', raw_name)
         if vid not in waves:
             waves[vid] = []
             id_to_names[vid] = []
@@ -53,7 +53,6 @@ def parse_vcd(path):
             if vid in waves:
                 waves[vid].append((cur_time, 0 if line[0] in 'xXzZ' else int(line[0])))
 
-    # every alias (name) for an id shares the same wave list
     result = {}
     for vid, name_list in id_to_names.items():
         for name, width in name_list:
@@ -73,17 +72,21 @@ def waveform_steps(entries, t_end):
 
 
 # ---------------------------------------------------------------------------
-# Load both VCDs
+# Load VCDs
 # ---------------------------------------------------------------------------
-print("Parsing RTL VCD...")
+print("Parsing tb_spi_slave.vcd (RTL)...")
 _, rtl = parse_vcd("tb_spi_slave.vcd")
-print("Parsing synth VCD...")
-_, syn = parse_vcd("tb_spi_slave_synth.vcd")
 
-T_END = 760
+print("Parsing tb_spi_slave_compare.vcd (B2B RTL)...")
+_, b2b_rtl = parse_vcd("tb_spi_slave_compare.vcd")
+
+print("Parsing tb_spi_slave_synth.vcd (B2B synth)...")
+_, b2b_syn = parse_vcd("tb_spi_slave_synth.vcd")
+
+T_END = 1210
 
 # ---------------------------------------------------------------------------
-# B2B signal comparison
+# B2B signal comparison at end of simulation
 # ---------------------------------------------------------------------------
 def final_val(wave_dict, name):
     entry = wave_dict.get(name)
@@ -91,12 +94,16 @@ def final_val(wave_dict, name):
     _, entries = entry
     return entries[-1][1] if entries else None
 
-compare_sigs = [('rst_n',1), ('ssel',1), ('sck',1), ('mosi',1), ('miso',1), ('data',8), ('debug',8)]
+compare_sigs = [
+    ('rst_n',    1), ('ssel',     1), ('sck',   1), ('mosi',    1),
+    ('miso',     1), ('data',     8), ('debug', 8),
+    ('miso_rx1', 8), ('miso_rx3', 8),
+]
 print("\n=== B2B Signal Comparison at end of simulation ===")
 all_match = True
 for sig, width in compare_sigs:
-    rv = final_val(rtl, sig)
-    sv = final_val(syn, sig)
+    rv = final_val(b2b_rtl, sig)
+    sv = final_val(b2b_syn, sig)
     match = rv == sv
     if not match: all_match = False
     status = "MATCH" if match else "MISMATCH ***"
@@ -108,7 +115,17 @@ for sig, width in compare_sigs:
 print(f"\nOverall B2B result: {'PASS — all signals match' if all_match else 'FAIL — mismatches detected'}")
 
 # ---------------------------------------------------------------------------
-# Plot 1: RTL waveform (full signal set)
+# Transaction boundaries (ns) — measured from stimulus tasks
+# ---------------------------------------------------------------------------
+TX1_START, TX1_END = 20,  350    # READ  Register1
+TX2_START, TX2_END = 370, 700    # WRITE Register3
+TX3_START, TX3_END = 720, 1050   # READ  Register3 (write confirmation)
+
+CLR_RTL   = '#1f77b4'
+CLR_SYNTH = '#d62728'
+
+# ---------------------------------------------------------------------------
+# Plot 1: RTL waveform
 # ---------------------------------------------------------------------------
 SIG_LIST = [
     ('rst_n', 1, False),
@@ -119,11 +136,9 @@ SIG_LIST = [
     ('data',  8, True),
     ('debug', 8, True),
 ]
-CLR_RTL   = '#1f77b4'
-CLR_SYNTH = '#d62728'
 
-fig, axes = plt.subplots(len(SIG_LIST), 1, figsize=(12, 7), sharex=True)
-fig.suptitle("SPI Slave — RTL Simulation Waveform", fontsize=11, y=0.99)
+fig, axes = plt.subplots(len(SIG_LIST), 1, figsize=(14, 7), sharex=True)
+fig.suptitle("SPI Slave — RTL Simulation Waveform (3 transactions)", fontsize=11, y=0.99)
 
 for ax, (name, width, is_bus) in zip(axes, SIG_LIST):
     ax.set_ylabel(name, rotation=0, labelpad=42, va='center', fontsize=8)
@@ -144,18 +159,22 @@ for ax, (name, width, is_bus) in zip(axes, SIG_LIST):
         prev_v = None
         for t_v, v_v in entries:
             if v_v != prev_v:
-                ax.text(t_v + 3, 0.5, f'0x{v_v:02X}', fontsize=6.5,
+                ax.text(t_v + 4, 0.5, f'0x{v_v:02X}', fontsize=6.5,
                         va='center', ha='left', color=CLR_RTL)
                 prev_v = v_v
 
-# transaction annotations on top panel
+# Transaction shading and labels on top panel
 for ax in axes:
-    ax.axvspan(20, 360, alpha=0.04, color='green')
-    ax.axvspan(360, 700, alpha=0.04, color='orange')
-axes[0].text(190, 1.05, "Tx1: READ Register1 (addr=0x01)", fontsize=7.5,
-             ha='center', color='darkgreen')
-axes[0].text(530, 1.05, "Tx2: WRITE 0xFF → Register3 (addr=0x03)", fontsize=7.5,
-             ha='center', color='darkorange')
+    ax.axvspan(TX1_START, TX1_END, alpha=0.05, color='green')
+    ax.axvspan(TX2_START, TX2_END, alpha=0.05, color='orange')
+    ax.axvspan(TX3_START, TX3_END, alpha=0.05, color='steelblue')
+
+axes[0].text((TX1_START+TX1_END)/2, 1.10, "Tx1: READ Reg1",
+             fontsize=7, ha='center', color='darkgreen')
+axes[0].text((TX2_START+TX2_END)/2, 1.10, "Tx2: WRITE 0xFF→Reg3",
+             fontsize=7, ha='center', color='darkorange')
+axes[0].text((TX3_START+TX3_END)/2, 1.10, "Tx3: READ Reg3 (confirm)",
+             fontsize=7, ha='center', color='steelblue')
 
 axes[-1].set_xlabel("Time (ns)", fontsize=9)
 axes[-1].set_xlim(0, T_END)
@@ -164,20 +183,31 @@ fig.savefig("waveform_rtl.png", dpi=150, bbox_inches='tight')
 print("Saved waveform_rtl.png")
 
 # ---------------------------------------------------------------------------
-# Plot 2: B2B overlay — RTL vs Synth
+# Plot 2: B2B overlay — RTL vs Synth (from compare TB)
 # ---------------------------------------------------------------------------
-B2B_SIGS = [('ssel',1,False), ('miso',1,False), ('data',8,True), ('debug',8,True)]
-fig2, axes2 = plt.subplots(len(B2B_SIGS), 1, figsize=(12, 5), sharex=True)
-fig2.suptitle("SPI Slave — B2B Comparison: RTL vs Synthesized Netlist", fontsize=11, y=0.99)
+B2B_SIGS = [
+    ('ssel',     1, False),
+    ('miso',     1, False),
+    ('data',     8, True),
+    ('debug',    8, True),
+    ('miso_rx1', 8, True),
+    ('miso_rx3', 8, True),
+]
+
+fig2, axes2 = plt.subplots(len(B2B_SIGS), 1, figsize=(14, 6), sharex=True)
+fig2.suptitle("SPI Slave — B2B Comparison: RTL vs Synthesised Netlist", fontsize=11, y=0.99)
 
 for ax, (name, width, is_bus) in zip(axes2, B2B_SIGS):
-    ax.set_ylabel(name, rotation=0, labelpad=42, va='center', fontsize=8)
+    ax.set_ylabel(name, rotation=0, labelpad=48, va='center', fontsize=8)
     ax.set_yticks([])
     ax.set_ylim(-0.35, 1.35)
     for sp in ('top', 'right', 'left'): ax.spines[sp].set_visible(False)
     maxv = (1 << width) - 1 if width > 1 else 1
 
-    for label, wave_dict, col, lw, ls in [('RTL', rtl, CLR_RTL, 2.0, '-'), ('Synth', syn, CLR_SYNTH, 1.2, '--')]:
+    for label, wave_dict, col, lw, ls in [
+        ('RTL',   b2b_rtl, CLR_RTL,   2.0, '-'),
+        ('Synth', b2b_syn, CLR_SYNTH, 1.2, '--'),
+    ]:
         if name not in wave_dict: continue
         _, entries = wave_dict[name]
         t_arr, v_arr = waveform_steps(entries, T_END)
