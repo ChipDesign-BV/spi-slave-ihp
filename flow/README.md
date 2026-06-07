@@ -1,44 +1,87 @@
-# spi_slave RTL2GDS Flow
+# spi_slave — RTL-to-GDS Flow
 
-This directory contains a starter implementation for converting `spi_slave.v` into a gate-level design and placing/routing it with the IHP PDK.
-
-## Files
-
-- `ihp_pdk.env.example` - Example environment variables for locating IHP PDK files.
-- `Makefile` - LibreLane build targets for RTL2GDS and OpenROAD.
-- `config.yaml` - LibreLane flow configuration.
-- `constraint.sdc` - Basic timing constraints for the `spi_slave` top-level clock.
-- `run_flow.sh` - Orchestration script for LibreLane synthesis and OpenROAD.
+LibreLane/OpenROAD flow for the `spi_slave` design targeting the IHP SG13G2
+0.13 µm BiCMOS open PDK.
 
 ## Prerequisites
 
-- `yosys` in `PATH`
-- `openroad` in `PATH`
-- IHP PDK cell LEF / tech LEF / Liberty files installed locally
+| Requirement | Notes |
+|---|---|
+| LibreLane | Classic flow, 1.x |
+| OpenROAD | 2.x |
+| Yosys | ≥ 0.40 |
+| KLayout | 0.30.x with Python PCell support |
+| IHP SG13G2 PDK | Open-source release from [IHP-Open-PDK](https://github.com/IHP-GmbH/IHP-Open-PDK) |
+
+The simplest way to satisfy all dependencies is the
+[IIC-OSIC-TOOLS](https://github.com/iic-jku/IIC-OSIC-TOOLS) Docker/WSL2
+container.
 
 ## Setup
 
-1. Copy the example environment file:
+```bash
+cp ihp_pdk.env.example ihp_pdk.env
+```
 
-   ```bash
-   cp ihp_pdk.env.example ihp_pdk.env
-   ```
-
-2. Edit `ihp_pdk.env` and set the correct paths for your local IHP PDK installation.
-
-## Run the flow
+Edit `ihp_pdk.env` and set:
 
 ```bash
-cd /foss/designs/spi_slave/flow
+export PDK_ROOT=/path/to/pdks        # directory that contains ihp-sg13g2/
+export PDK=ihp-sg13g2
+export PATH=/path/to/foss/tools/bin:/path/to/foss/tools/sak:${PATH}
+```
+
+The PATH line is required because `run_flow.sh` invokes LibreLane via a
+login shell (`bash -lc`) which may not inherit the interactive-shell PATH.
+
+## Running the flow
+
+```bash
 ./run_flow.sh
 ```
 
-The script will create a `work/` directory and invoke LibreLane to synthesize the design and generate the final GDS.
+The flow runs 69 steps and writes outputs to `runs/<RUN_DATE>/`.
+Final GDS and DEF are in `runs/<RUN_DATE>/final/`.
 
-> In headless environments, `run_flow.sh` will skip the OpenROAD GUI step and still complete the RTL2GDS flow.
+## Flow configuration
 
-## Notes
+| File | Purpose |
+|---|---|
+| `config.yaml` | LibreLane Classic flow config (die area, design name, SDC paths) |
+| `constraint.sdc` | Timing: 10 ns system clock; 2 ns I/O delays (adjust as needed) |
+| `synth.ys` | Standalone Yosys script (used to pre-generate `spi_slave_synth.v`) |
+| `place_route.tcl` | Fallback OpenROAD TCL script (not used by `run_flow.sh`) |
 
-- The LibreLane flow uses `config.yaml`; it requires a valid PDK root and PDK name.
-- The existing `synth.ys` and `place_route.tcl` files remain available as fallback, but LibreLane is now the primary flow.
-- This flow is intentionally scaffolded for an initial RTL2GDS implementation; additional PDK-specific tuning is expected once the actual IHP files are available.
+## Known issues / patches
+
+### KLayout seal ring — librelane API mismatch
+
+`librelane` ≤ 1.x ships an `ihp_seal_ring.py` that calls
+`layout.create_cell("sealring", "SG13_dev", params)`.  This API works only
+for native KLayout PCells; the IHP PDK registers its seal ring via a
+`cni.dlo.PCellWrapper`, which requires `add_pcell_variant` instead.  The
+script also passes die dimensions in database units (nm) where the PCell
+expects µm.
+
+If you encounter:
+
+```
+AttributeError: 'NoneType' object has no attribute 'cell_index'
+```
+
+at step KLayout.SealRing, patch the installed script
+(`site-packages/librelane/scripts/klayout/ihp_seal_ring.py`) as follows:
+
+1. Change `layout = pya.Layout()` → `layout = pya.Layout(True)`
+2. Replace the `create_cell` block with:
+   ```python
+   lib = pya.Library.library_by_name("SG13_dev", "sg13g2")
+   pcell_decl = lib.layout().pcell_declaration("sealring")
+   p = pcell_decl.params_as_hash(pcell_decl.get_parameters())
+   edge_box = float(re.sub(r"[a-zA-Z]+", "", p["edgeBox"].default))
+   die_w_um = die_width / 1000.0 - edge_box * 2
+   die_h_um = die_height / 1000.0 - edge_box * 2
+   params = {"l": f"{die_w_um:.6f}u", "w": f"{die_h_um:.6f}u"}
+   sealring_pcell_i = layout.add_pcell_variant(lib, pcell_decl.id(), params)
+   ```
+3. Add `import re` at the top of the file.
