@@ -1,15 +1,15 @@
-// Koen Van Caekenberghe, ChipDesign B.V., 06.2026
+// Koen Van Caekenberghe (koen.vancaekenberghe@chipdesign.be), ChipDesign B.V., 06.2026
 // Test bench for SPI Slave
 // Koen Van Caekenberghe (koen.vancaekenberghe@chipdesign.be), ChipDesign B.V., 2021
 
-// iverilog tb_SPI_Slave.v
+// iverilog tb_spi_slave.v
 // vvp a.out
-// gtkwave tb_SPI_Slave.vcd
+// gtkwave tb_spi_slave.vcd
 
-`include "SPI_Slave.v"
+`include "spi_slave.v"
 `timescale 1ns/1ns
 
-module tb_SPI_Slave();
+module tb_spi_slave();
 
 reg [7:0] addr; // IC internal register select
 reg clk; // IC internal clock (PLL)
@@ -26,7 +26,7 @@ reg rst_n; // IC power-on-reset
 reg sck; // SPI data clock
 reg ssel; // SPI slave select
 
-SPI_Slave SPI_Slave1(clk,rst_n,sck,mosi,ssel,miso,addr,data,debug);
+spi_slave spi_slave1(clk,rst_n,sck,mosi,ssel,miso,addr,data,debug);
 
 initial begin
 	addr=8'd3;
@@ -130,8 +130,8 @@ initial begin
 end
 
 initial begin
-	$dumpfile("tb_SPI_Slave.vcd");
-	$dumpvars(0,tb_SPI_Slave);
+	$dumpfile("tb_spi_slave.vcd");
+	$dumpvars(0,tb_spi_slave);
 end
 
 //initial begin

@@ -1,12 +1,12 @@
-// Koen Van Caekenberghe, ChipDesign B.V., 06.2026
+// Koen Van Caekenberghe (koen.vancaekenberghe@chipdesign.be), ChipDesign B.V., 06.2026
 // Test bench for SPI Slave comparison between RTL and synthesized netlist
 `timescale 1ns/1ns
 
 `ifndef SYNTH
-`include "SPI_Slave.v"
+`include "spi_slave.v"
 `endif
 
-module tb_SPI_Slave_compare();
+module tb_spi_slave_compare();
 
 reg [7:0] addr;
 reg clk;
@@ -23,7 +23,7 @@ reg rst_n;
 reg sck;
 reg ssel;
 
-SPI_Slave spi_slave1(
+spi_slave spi_slave1(
     .Clk(clk),
     .iRST_N(rst_n),
     .SCK(sck),
@@ -128,8 +128,8 @@ initial begin
 end
 
 initial begin
-    $dumpfile("tb_SPI_Slave_compare.vcd");
-    $dumpvars(0,tb_SPI_Slave_compare);
+    $dumpfile("tb_spi_slave_compare.vcd");
+    $dumpvars(0,tb_spi_slave_compare);
 end
 
 endmodule

@@ -1,4 +1,4 @@
-# Simple timing constraints for SPI_Slave
+# Simple timing constraints for spi_slave
 # Adjust the period and delays for your target IHP timing requirements.
 
 create_clock -name clk -period 10.0 [get_ports Clk]

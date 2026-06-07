@@ -12,7 +12,7 @@ endobj
 << /Length 2791 >>
 stream
 BT /F1 12 Tf 72 760 Td
-(SPI_Slave Verification and RTL2GDS Flow) Tj
+(spi_slave Verification and RTL2GDS Flow) Tj
 T*
 (Koen Van Caekenberghe, ChipDesign B.V., June 2026) Tj
 T*
@@ -20,7 +20,7 @@ T*
 T*
 (Overview) Tj
 T*
-(The SPI_Slave design is a small SPI slave IP block that supports a simple 8-bit) Tj
+(The spi_slave design is a small SPI slave IP block that supports a simple 8-bit) Tj
 T*
 (address and data transfer protocol. The SPI interface operates in mode 0) Tj
 T*
@@ -116,7 +116,7 @@ T*
 T*
 (Conclusion) Tj
 T*
-(The SPI_Slave design is functionally consistent across RTL, synthesized netlist,) Tj
+(The spi_slave design is functionally consistent across RTL, synthesized netlist,) Tj
 T*
 (and final gate-level netlist simulations. The repository includes the) Tj
 T*

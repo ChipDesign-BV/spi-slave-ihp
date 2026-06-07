@@ -18,7 +18,7 @@ meta:
 
 DIE_AREA: [0, 0, 157780, 176500]
 
-DESIGN_NAME: SPI_Slave
+DESIGN_NAME: spi_slave
 VERILOG_FILES:
 - dir::../spi_slave.v
 VERILOG_INCLUDE_DIRS: []

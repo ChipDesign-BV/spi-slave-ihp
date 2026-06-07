@@ -1,6 +1,6 @@
-# SPI_Slave RTL-to-GDS Public Repo
+# spi_slave RTL-to-GDS Public Repo
 
-This repository contains the RTL, testbench, and LibreLane/OpenROAD flow files needed to reproduce the `SPI_Slave` verification and place-and-route flow.
+This repository contains the RTL, testbench, and LibreLane/OpenROAD flow files needed to reproduce the `spi_slave` verification and place-and-route flow.
 
 ## Included files
 

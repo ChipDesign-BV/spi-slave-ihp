@@ -1,4 +1,4 @@
-# SPI_Slave RTL2GDS Flow
+# spi_slave RTL2GDS Flow
 
 This directory contains a starter implementation for converting `spi_slave.v` into a gate-level design and placing/routing it with the IHP PDK.
 
@@ -7,7 +7,7 @@ This directory contains a starter implementation for converting `spi_slave.v` in
 - `ihp_pdk.env.example` - Example environment variables for locating IHP PDK files.
 - `Makefile` - LibreLane build targets for RTL2GDS and OpenROAD.
 - `config.yaml` - LibreLane flow configuration.
-- `constraint.sdc` - Basic timing constraints for the `SPI_Slave` top-level clock.
+- `constraint.sdc` - Basic timing constraints for the `spi_slave` top-level clock.
 - `run_flow.sh` - Orchestration script for LibreLane synthesis and OpenROAD.
 
 ## Prerequisites

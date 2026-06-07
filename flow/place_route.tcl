@@ -1,7 +1,7 @@
-# OpenROAD placement and routing script for SPI_Slave.
+# OpenROAD placement and routing script for spi_slave.
 # This script expects the IHP PDK environment to be defined in ihp_pdk.env.
 
-set top SPI_Slave
+set top spi_slave
 set workdir [file join [file dirname [info script]] work]
 file mkdir $workdir
 

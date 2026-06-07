@@ -1,7 +1,7 @@
 {
   "creator": "Yosys 0.65 (git sha1 b85cad634, g++ 13.3.0-6ubuntu2~24.04.1 -fPIC -O3)",
   "modules": {
-    "SPI_Slave": {
+    "spi_slave": {
       "attributes": {
         "top": "00000000000000000000000000000001",
         "src": "../spi_slave.v:17.1-207.10"

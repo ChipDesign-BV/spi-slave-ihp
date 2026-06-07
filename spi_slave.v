@@ -1,4 +1,4 @@
-// Koen Van Caekenberghe, ChipDesign B.V., 06.2026
+// Koen Van Caekenberghe (koen.vancaekenberghe@chipdesign.be), ChipDesign B.V., 06.2026
 // SPI Slave
 //
 // - SPI mode: 0 (CPOL: 0, CPHA: 0)
@@ -15,7 +15,7 @@
 
 `define ERROR_ADD_OUT_OF_RANGE 	8'hFF
 
-module SPI_Slave
+module spi_slave
 (
 	input Clk,
 	input iRST_N,
