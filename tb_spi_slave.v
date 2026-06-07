@@ -1,6 +1,5 @@
 // Koen Van Caekenberghe (koen.vancaekenberghe@chipdesign.be), ChipDesign B.V., 06.2026
 // Test bench for SPI Slave
-// Koen Van Caekenberghe (koen.vancaekenberghe@chipdesign.be), ChipDesign B.V., 2021
 
 // iverilog tb_spi_slave.v
 // vvp a.out

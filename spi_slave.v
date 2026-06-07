@@ -4,8 +4,6 @@
 // - SPI mode: 0 (CPOL: 0, CPHA: 0)
 // - Address range: 2^7. MSB bit of address byte is used for SPI command bit (SPI_READ_COMMAND=0, SPI_WRITE_COMMAND=1)
 // - Register width: 1 byte 
-// 
-// Koen Van Caekenberghe (koen.vancaekenberghe@chipdesign.be), ChipDesign B.V., 21/08/2020
 
 `define STATE_SPI_IDLE 		3'd0
 `define STATE_SPI_COMMAND	3'd1
