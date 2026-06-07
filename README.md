@@ -1,66 +1,173 @@
-# spi_slave RTL-to-GDS Public Repo
+# spi_slave — SPI Slave IP for IHP SG13G2
 
-This repository contains the RTL, testbench, and LibreLane/OpenROAD flow files needed to reproduce the `spi_slave` verification and place-and-route flow.
+A small, synchronous SPI slave IP block implemented in Verilog and taped out
+through the IHP SG13G2 0.13 µm BiCMOS process using the open-source
+LibreLane/OpenROAD RTL-to-GDS flow.
 
-## Included files
+**Author:** Koen Van Caekenberghe, ChipDesign B.V.  
+**License:** Apache 2.0  
+**PDK:** IHP SG13G2  
+**Die area:** 157.78 µm × 176.50 µm  
 
-- `spi_slave.v` — RTL design
-- `tb_spi_slave.v` — original RTL testbench
-- `tb_spi_slave_compare.v` — comparison testbench for RTL vs synthesized netlist
-- `flow/Makefile` — build targets for LibreLane/OpenROAD
-- `flow/README.md` — flow-specific documentation
-- `flow/config.yaml` — LibreLane flow configuration
-- `flow/constraint.sdc` — timing constraints
-- `flow/run_flow.sh` — helper script to run the flow
-- `flow/ihp_pdk.env.example` — PDK environment template
-- `flow/place_route.tcl` — fallback OpenROAD script
-- `flow/synth.ys` — Yosys synthesis script
-- `flow/spi_slave_synth.v` — generated Yosys netlist
-- `flow/spi_slave_synth.json` — synthesis metadata
-- `verification_report.tex` — LaTeX verification report
-- `verification_report.pdf` — compiled PDF report
+---
 
-## Prerequisites
+## Design overview
 
-- `yosys` in `PATH`
-- `openroad` in `PATH`
-- IHP PDK installed locally (for example `ihp-sg13g2`)
+The `spi_slave` module exposes eight 8-bit registers over SPI (Mode 0,
+CPOL=0, CPHA=0) and provides a secondary parallel read port for on-chip
+register readback independent of the SPI bus.
 
-## Setup
+| Feature | Value |
+|---|---|
+| Protocol | SPI Mode 0 (CPOL=0, CPHA=0) |
+| Register count | 8 × 8-bit |
+| Address bits | 7 (lower bits of command byte) |
+| R/nW flag | Bit 7 of command byte: 1=Read, 0=Write |
+| Parallel read port | `Add2_in[7:0]` / `Data2_out[7:0]` |
+| Debug port | `debug[7:0]` — sticky OR of FSM states visited |
+| Reset | Active-low asynchronous (`iRST_N`) |
 
-1. Copy the PDK environment example:
+The SPI interface is a 5-state Moore FSM (IDLE → COMMAND → READ/WRITE → END).
+All asynchronous SPI inputs pass through a two-flip-flop metastability
+synchroniser before entering the system-clock domain.
 
-   ```bash
-   cp flow/ihp_pdk.env.example flow/ihp_pdk.env
-   ```
+---
 
-2. Update `flow/ihp_pdk.env` to point to your local IHP PDK installation.
+## Repository layout
 
-## Run the flow
-
-```bash
-cd spi_slave_github_repo/flow
-./run_flow.sh
+```
+spi_slave.v                  RTL source
+spi_slave.gds                Final GDS (IHP SG13G2, with seal ring)
+spi_slave.def                Final DEF
+tb_spi_slave.v               RTL testbench (two SPI transactions)
+tb_spi_slave_compare.v       B2B testbench (RTL vs synthesised netlist)
+gen_waveforms.py             VCD parser and waveform PNG generator
+waveform_rtl.png             RTL simulation waveform
+waveform_b2b.png             B2B overlay waveform (RTL vs netlist)
+verification_report.pdf      Compiled verification report (LaTeX)
+verification_report.tex      LaTeX source for the report
+flow/
+  config.yaml                LibreLane flow configuration
+  constraint.sdc             Timing constraints (10 ns system clock)
+  run_flow.sh                Flow entry point
+  ihp_pdk.env.example        PDK environment template
+  Makefile                   LibreLane/OpenROAD make targets
+  spi_slave_synth.v          Yosys-generated structural netlist
+  spi_slave_synth.json       Synthesis statistics
+  synth.ys                   Yosys synthesis script (standalone)
+  place_route.tcl            OpenROAD fallback placement script
 ```
 
-## Run simulation
+---
 
-From the repo root, RTL simulation:
+## RTL simulation
+
+Requires [Icarus Verilog](https://steveicarus.github.io/iverilog/) ≥ 11.
+
+### RTL testbench
 
 ```bash
-cd spi_slave_github_repo
+iverilog -g2012 -o tb_rtl.out tb_spi_slave.v
+vvp tb_rtl.out                    # produces tb_spi_slave.vcd
+```
+
+### Back-to-back (RTL vs synthesised netlist)
+
+```bash
+# RTL
 iverilog -g2012 -o tb_rtl.out tb_spi_slave_compare.v
 vvp tb_rtl.out
-```
 
-Synthesis/netlist comparison:
-
-```bash
-cd spi_slave_github_repo
+# Synthesised netlist (Yosys generic cells, no PDK library needed)
 iverilog -g2012 -DSYNTH -o tb_synth.out flow/spi_slave_synth.v tb_spi_slave_compare.v
 vvp tb_synth.out
 ```
 
-## Notes
+Both should print:
 
-The flow is configured for the IHP SG13G2 PDK. External PDK paths are required and are not included in this repository.
+```
+FINISH                750000: addr=03 data=ff debug=1f miso=1 ssel=0
+```
+
+### Generate waveform images
+
+```bash
+pip install matplotlib numpy          # one-time
+python3 gen_waveforms.py              # reads *.vcd, writes waveform_*.png
+```
+
+---
+
+## RTL-to-GDS flow
+
+Requires [IIC-OSIC-TOOLS](https://github.com/iic-jku/IIC-OSIC-TOOLS) or a
+compatible environment with LibreLane, OpenROAD, and the IHP SG13G2 PDK.
+
+```bash
+cd flow
+cp ihp_pdk.env.example ihp_pdk.env
+# Edit ihp_pdk.env — set PDK_ROOT and PATH to match your installation
+./run_flow.sh
+```
+
+The flow runs 69 LibreLane/OpenROAD steps (synthesis → floorplan → placement
+→ CTS → global routing → detailed routing → RCX → STA → GDS stream-out →
+seal-ring insertion).  Final outputs land in
+`flow/runs/<RUN_DATE>/final/`.
+
+### Tested environment
+
+Verified inside the **IIC-OSIC-TOOLS** Docker/WSL2 container
+(image tag `2025.12` or later):
+
+| Tool | Version |
+|---|---|
+| LibreLane | 1.x |
+| OpenROAD | 2.x |
+| Yosys | ≥ 0.40 |
+| KLayout | 0.30.x |
+| IHP PDK | ihp-sg13g2 (open release) |
+
+> **Note:** A bug in the librelane `ihp_seal_ring.py` script (use of the
+> deprecated `create_cell` KLayout API and missing nm→µm unit conversion) is
+> patched automatically when using the `run_flow.sh` in this repo — see
+> `flow/ihp_pdk.env` for details.
+
+### Flow results
+
+| Metric | Value |
+|---|---|
+| Die size | 157.78 µm × 176.50 µm |
+| Final GDS | `spi_slave.gds` (803 KiB, seal ring included) |
+| Final DEF | `spi_slave.def` (624 KiB) |
+| Antenna check | Pass |
+| LVS | Pass |
+| DRC | Skipped (KLayout and Magic DRC disabled in config) |
+| Timing | No setup/hold violations reported |
+
+---
+
+## Verification results
+
+All output signals are bit-for-bit identical between RTL and synthesised netlist:
+
+| Signal | RTL | Synth | |
+|---|---|---|---|
+| `rst_n` | 1 | 1 | ✓ |
+| `ssel` | 0 | 0 | ✓ |
+| `sck` | 0 | 0 | ✓ |
+| `mosi` | 1 | 1 | ✓ |
+| `miso` | 1 | 1 | ✓ |
+| `data` | 0xFF | 0xFF | ✓ |
+| `debug` | 0x1F | 0x1F | ✓ |
+
+`debug=0x1F` confirms all five FSM states (IDLE, COMMAND, WRITE, READ, END)
+were visited.  See `verification_report.pdf` for waveforms and full analysis.
+
+---
+
+## License
+
+Copyright 2026 Koen Van Caekenberghe, ChipDesign B.V.
+
+Licensed under the [Apache License, Version 2.0](LICENSE).

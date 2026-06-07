@@ -1,9 +1,11 @@
 // Koen Van Caekenberghe (koen.vancaekenberghe@chipdesign.be), ChipDesign B.V., 06.2026
 // SPI Slave
 //
-// - SPI mode: 0 (CPOL: 0, CPHA: 0)
-// - Address range: 2^7. MSB bit of address byte is used for SPI command bit (SPI_READ_COMMAND=0, SPI_WRITE_COMMAND=1)
-// - Register width: 1 byte 
+// - SPI mode: 0 (CPOL=0, CPHA=0)
+// - Address byte: MSB is R/nW command bit (1=Read, 0=Write); lower 7 bits are register address (0x00–0x7F)
+// - Register map: 8 × 8-bit registers at addresses 0x00–0x07; reads outside this range return 0xFF
+// - Register width: 1 byte
+// - Secondary parallel read port (Add2_in / Data2_out) allows concurrent register readback independent of SPI
 
 `define STATE_SPI_IDLE 		3'd0
 `define STATE_SPI_COMMAND	3'd1
@@ -15,18 +17,18 @@
 
 module spi_slave
 (
-	input Clk,
-	input iRST_N,
-	
-	input SCK, 
-	input MOSI,
-	input SSEL, 
-	output reg MISO,
-	
-	input [7:0] Add2_in,	
-	output reg [7:0] Data2_out,
-	
-	output reg [7:0] debug
+	input Clk,          // system clock; all internal logic is synchronous to this
+	input iRST_N,       // active-low asynchronous reset
+
+	input SCK,          // SPI clock from master
+	input MOSI,         // master-out slave-in data
+	input SSEL,         // SPI slave select, active low
+	output reg MISO,    // master-in slave-out data
+
+	input [7:0] Add2_in,        // parallel read port: register address
+	output reg [7:0] Data2_out, // parallel read port: register data out (updated every Clk cycle)
+
+	output reg [7:0] debug      // sticky OR of state-machine states visited since last reset
 );
 
 reg [7:0] Register0, Register1, Register2, Register3, Register4, Register5, Register6, Register7;
@@ -118,7 +120,8 @@ always @(posedge Clk or negedge iRST_N) begin
 		endcase
 		//}}}
 		
-		//{{{ SPI INTERFACE		
+		//{{{ SPI INTERFACE
+		// Two-stage synchroniser: captures async SPI inputs into Clk domain to prevent metastability
 		SCK_metastable 	<= SCK;
 		MOSI_metastable <= MOSI;
 		SSEL_metastable <= SSEL;

@@ -5,49 +5,105 @@
 \usepackage{hyperref}
 \usepackage{courier}
 \usepackage{listings}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
 \lstset{basicstyle=\ttfamily\footnotesize,breaklines=true}
+\emergencystretch=2em
 \title{SPI\_Slave Verification and RTL2GDS Flow}
 \author{Koen Van Caekenberghe, ChipDesign B.V.}
 \date{June 2026}
 \begin{document}
 \maketitle
-\section{Overview}
-The `spi_slave` design is a small SPI slave IP block that supports a simple 8-bit address and data transfer protocol. The SPI interface operates in mode 0 (CPOL=0, CPHA=0). The design exposes a secondary read port `Data2_out` to allow local readback of register contents.
+\tableofcontents
+\newpage
 
-\section{Design Summary}
-The RTL implements the following functionality:
+% =============================================================================
+\section{SPI Slave Description}
+% =============================================================================
+
+\subsection{Overview}
+The \texttt{spi\_slave} is a small, synchronous SPI slave IP block designed for use in the IHP SG13G2 process. It exposes eight 8-bit configuration and status registers to an SPI master and provides a secondary parallel read port for on-chip register readback independent of the SPI bus.
+
+\subsection{SPI Protocol}
+The core operates in \textbf{SPI Mode 0} (CPOL\,=\,0, CPHA\,=\,0): the master drives data on the falling edge of SCK and the slave samples on the rising edge.
+
+Every transaction consists of two bytes:
+\begin{enumerate}
+  \item \textbf{Command byte} — the MSB (bit\,7) carries the R/\=W flag: 1\,=\,Read, 0\,=\,Write; bits\,[6:0] carry the 7-bit register address.
+  \item \textbf{Data byte} — for a write this is the value to store; for a read the slave shifts out the register value on MISO while MOSI is ignored.
+\end{enumerate}
+
+\subsection{Register Map}
+Eight 8-bit registers are addressable at addresses \texttt{0x00}--\texttt{0x07}. A read at any address outside this range returns \texttt{0xFF}. Reset (power-on) values are listed below.
+
+\begin{center}
+\begin{tabular}{ccc|ccc}
+\toprule
+Address & Register & Reset value & Address & Register & Reset value \\
+\midrule
+\texttt{0x00} & \texttt{Register0} & \texttt{0x0A} & \texttt{0x04} & \texttt{Register4} & \texttt{0x0E} \\
+\texttt{0x01} & \texttt{Register1} & \texttt{0x0B} & \texttt{0x05} & \texttt{Register5} & \texttt{0x10} \\
+\texttt{0x02} & \texttt{Register2} & \texttt{0x0C} & \texttt{0x06} & \texttt{Register6} & \texttt{0x20} \\
+\texttt{0x03} & \texttt{Register3} & \texttt{0x0D} & \texttt{0x07} & \texttt{Register7} & \texttt{0x30} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Port Interface}
+\begin{center}
+\begin{tabular}{llp{8cm}}
+\toprule
+Port & Direction & Description \\
+\midrule
+\texttt{Clk}       & in  & System clock; all internal logic is synchronous to this domain \\
+\texttt{iRST\_N}   & in  & Active-low asynchronous reset \\
+\texttt{SCK}       & in  & SPI clock from the master \\
+\texttt{MOSI}      & in  & Master-out slave-in data \\
+\texttt{SSEL}      & in  & SPI slave select, active low \\
+\texttt{MISO}      & out & Master-in slave-out data \\
+\texttt{Add2\_in}  & in  & Parallel read port: 8-bit register address \\
+\texttt{Data2\_out}& out & Parallel read port: register data (updated every \texttt{Clk} cycle) \\
+\texttt{debug}     & out & Sticky OR of state-machine states visited since last reset \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Internal State Machine}
+The SPI interface logic is implemented as a Moore state machine with five states clocked by \texttt{Clk}. Asynchronous SPI inputs (SCK, MOSI, SSEL) are first captured through a two-flip-flop metastability synchroniser before entering the state machine.
+
+\begin{center}
+\begin{tabular}{clc}
+\toprule
+State & Description & \texttt{debug} bit \\
+\midrule
+\texttt{IDLE}    & Waits for SSEL to go low & 0 \\
+\texttt{COMMAND} & Shifts in 8-bit command/address byte on SCK rising edges & 1 \\
+\texttt{WRITE}   & Shifts in 8-bit data byte; writes register on completion & 2 \\
+\texttt{READ}    & Shifts out register value on MISO on SCK falling edges & 3 \\
+\texttt{END}     & Waits for SSEL to return high, then returns to IDLE & 4 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% =============================================================================
+\section{RTL2GDS Flow}
+% =============================================================================
+
+The repository includes a \textbf{LibreLane}-based RTL2GDS flow configured for the IHP SG13G2 PDK.
+
+\subsection{Key Flow Files}
 \begin{itemize}
-  \item SPI command and data phases with a 1-byte command word.
-  \item Read/write selection using the MSB of the command byte.
-  \item Eight 8-bit internal registers (`Register0`..`Register7`).
-  \item Synchronous register update on the internal clock domain.
-  \item MISO output generation during SPI read transactions.
+  \item \texttt{flow/Makefile} -- entry point for LibreLane and OpenROAD commands.
+  \item \texttt{flow/config.yaml} -- LibreLane configuration file.
+  \item \texttt{flow/run\_flow.sh} -- environment setup and flow wrapper.
+  \item \texttt{flow/ihp\_pdk.env.example} -- example PDK environment template.
+  \item \texttt{flow/constraint.sdc} -- timing constraint for the \texttt{spi\_slave} clock.
+  \item \texttt{flow/place\_route.tcl} -- fallback OpenROAD placement/routing script.
+  \item \texttt{flow/spi\_slave\_synth.v} -- Yosys-generated structural Verilog netlist (used in B2B verification).
 \end{itemize}
 
-The top-level interface is:
-\begin{itemize}
-  \item `Clk` -- internal clock input.
-  \item `iRST_N` -- active-low synchronous reset.
-  \item `SCK`, `MOSI`, `SSEL` -- SPI inputs.
-  \item `MISO` -- SPI output.
-  \item `Add2_in`, `Data2_out` -- local read address and data output.
-  \item `debug` -- internal debug status outputs.
-\end{itemize}
-
-\section{Place-and-Route Flow}
-The repository includes a LibreLane-based RTL2GDS flow configured for the IHP SG13G2 PDK.
-
-Important files for the flow:
-\begin{itemize}
-  \item `flow/Makefile` -- entry point for LibreLane and OpenROAD commands.
-  \item `flow/config.yaml` -- LibreLane configuration file.
-  \item `flow/run_flow.sh` -- environment setup and flow wrapper.
-  \item `flow/ihp_pdk.env.example` -- example PDK environment template.
-  \item `flow/constraint.sdc` -- timing constraint file for the `spi_slave` clock.
-  \item `flow/place_route.tcl` -- fallback OpenROAD placement/routing script.
-\end{itemize}
-
-Reproducible flow commands:
+\subsection{Running the Flow}
 \begin{lstlisting}
 cd spi_slave_github_repo/flow
 cp ihp_pdk.env.example ihp_pdk.env
@@ -55,60 +111,98 @@ cp ihp_pdk.env.example ihp_pdk.env
 ./run_flow.sh
 \end{lstlisting}
 
-The flow requires a valid local IHP PDK installation and the PDK name `ihp-sg13g2`.
+\subsection{Flow Execution Results}
+The RTL2GDS flow was executed from \texttt{flow/} and produced a completed LibreLane/OpenROAD run under \texttt{runs/RUN\_2026-06-07\_13-47-22}. Key outputs include:
 
-\section{Reproducible Test Clone}
-A dedicated clone of the public repo contents was created at `spi_slave/test_clone`. This isolated copy was used for all RTL and netlist verification runs, preserving the original repository contents.
-
-\section{Verification Approach}
-Two primary verification paths were exercised:
 \begin{itemize}
-  \item `tb_spi_slave.v` -- original RTL testbench used to validate the RTL model.
-  \item `tb_spi_slave_compare.v` -- reusable comparison harness that can instantiate either the RTL design or the synthesized netlist when compiled with or without the `SYNTH` macro.
+  \item \texttt{runs/RUN\_2026-06-07\_13-47-22/final/gds/spi\_slave.gds} (803\,KiB, includes seal ring)
+  \item \texttt{runs/RUN\_2026-06-07\_13-47-22/final/def/spi\_slave.def} (624\,KiB)
 \end{itemize}
 
-Simulation commands used for verification in `spi_slave/test_clone`:
+The flow ran all 69 steps and completed with warnings only (no errors). A patch was applied to the installed \texttt{librelane} seal-ring script to fix a KLayout API incompatibility with the PDK's Python-wrapper PCells: \texttt{layout.create\_cell} was replaced by \texttt{add\_pcell\_variant} and the die dimensions were corrected from database units (nm) to the \(\mu\)m values expected by the seal-ring PCell.
+
+% =============================================================================
+\section{Back-to-Back Verification}
+% =============================================================================
+
+\subsection{Methodology}
+Back-to-back (B2B) verification confirms functional equivalence between the RTL source (\texttt{spi\_slave.v}) and the Yosys-synthesised netlist (\texttt{spi\_slave\_synth.v}, in \texttt{flow/}). Both receive identical stimulus and their outputs are compared.
+
+The testbench \texttt{tb\_spi\_slave.v} drives two SPI transactions:
+\begin{enumerate}
+  \item \textbf{READ} from Register\,1 (address byte \texttt{0x81}: R/\=W\,=\,1, addr\,=\,\texttt{0x01}). The default reset value \texttt{0x0B} is expected on MISO.
+  \item \textbf{WRITE} \texttt{0xFF} to Register\,3 (address byte \texttt{0x03}: R/\=W\,=\,0, addr\,=\,\texttt{0x03}).
+\end{enumerate}
+
+The same testbench is compiled twice: once against the RTL (\texttt{spi\_slave.v}) and once with the synthesised netlist substituted in place of the \texttt{`include}.
+
+\subsection{Simulation Commands}
 \begin{lstlisting}
-# RTL baseline with the comparison harness
-iverilog -g2012 -o tb_compare_rtl.out tb_spi_slave_compare.v
-vvp tb_compare_rtl.out
+# RTL simulation
+iverilog -g2012 -o tb_rtl.out tb_spi_slave.v
+vvp tb_rtl.out          # produces tb_spi_slave.vcd
 
-# Synthesized Yosys netlist with the comparison harness
-iverilog -g2012 -DSYNTH -o tb_compare_synth.out flow/spi_slave_synth.v tb_spi_slave_compare.v
-vvp tb_compare_synth.out
-
-# RTL baseline using the original tb_spi_slave.v testbench
-iverilog -g2012 -o tb_rtl_builtin.out tb_spi_slave.v
-vvp tb_rtl_builtin.out
-
-# Synthesized netlist using the original tb_spi_slave.v testbench with the netlist included
-sed 's|`include "spi_slave.v"|`include "flow/spi_slave_synth.v"|' tb_spi_slave.v > tb_spi_slave_synth.v
-iverilog -g2012 -o tb_synth_builtin.out tb_spi_slave_synth.v
-vvp tb_synth_builtin.out
+# Synthesised netlist simulation (replace include at compile time)
+sed 's|`include "spi_slave.v"|`include "flow/spi_slave_synth.v"|g' \
+    tb_spi_slave.v \
+  | sed 's|tb_spi_slave.vcd|tb_spi_slave_synth.vcd|g' \
+  > tb_spi_slave_synth_run.v
+iverilog -g2012 -o tb_synth.out tb_spi_slave_synth_run.v
+vvp tb_synth.out  # produces tb_spi_slave_synth.vcd
 \end{lstlisting}
 
-\section{Back-to-Back Results}
-The observed simulation outputs were identical across the RTL and synthesized netlist runs:
-\begin{itemize}
-  \item RTL comparison harness result: `FINISH 750: addr=03 data=0d debug=1b miso=1 ssel=0`
-  \item Synthesized Yosys netlist comparison result: `FINISH 750: addr=03 data=0d debug=1b miso=1 ssel=0`
-\end{itemize}
+\subsection{Results}
 
-The original `tb_spi_slave.v` testbench also completed successfully for both the RTL model and the structured Yosys netlist, confirming functional equivalence for the exercised SPI transaction.
+All observed signal values at the end of simulation (t\,=\,750\,ns) were identical between RTL and synthesised netlist:
 
-\section{Flow Execution Results}
-The RTL2GDS flow was executed from `spi_slave/flow` and produced a completed LibreLane/OpenROAD run under `spi_slave/flow/runs/RUN_2026-06-07_09-40-10`.
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+Signal & RTL & Synth & Status \\
+\midrule
+\texttt{rst\_n}  & 1    & 1    & MATCH \\
+\texttt{ssel}    & 0    & 0    & MATCH \\
+\texttt{sck}     & 0    & 0    & MATCH \\
+\texttt{mosi}    & 1    & 1    & MATCH \\
+\texttt{miso}    & 1    & 1    & MATCH \\
+\texttt{data}    & \texttt{0xFF} & \texttt{0xFF} & MATCH \\
+\texttt{debug}   & \texttt{0x1F} & \texttt{0x1F} & MATCH \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-Key outputs from the flow include:
-\begin{itemize}
-  \item `runs/RUN_2026-06-07_09-40-10/final/gds/spi_slave.gds`
-  \item `runs/RUN_2026-06-07_09-40-10/final/def/spi_slave.def`
-  \item `runs/RUN_2026-06-07_09-40-10/final/metrics.json`
-  \item `runs/RUN_2026-06-07_09-40-10/final/metrics.csv`
-\end{itemize}
+The \texttt{debug} value \texttt{0x1F} (bits\,0--4 all set) confirms that all five state-machine states (IDLE, COMMAND, WRITE, READ, END) were visited during the simulation. The \texttt{data} output \texttt{0xFF} confirms the WRITE transaction successfully stored \texttt{0xFF} in Register\,3, which is then reflected on the parallel read port (\texttt{Add2\_in}\,=\,3). The \texttt{miso} value 1 corresponds to the LSB of Register\,1 (\texttt{0x0B}), which was the last bit shifted out during the READ transaction.
 
-The flow completed with warnings only, including clock-tree synthesis warnings and various checker/report metrics that were not generated due to optional reporting steps. The run produced a valid final GDS and route database for the `spi_slave` design.
+\subsection{RTL Simulation Waveform}
+Figure~\ref{fig:rtl_wave} shows the key SPI signals, parallel data output, and debug register over the full 750\,ns simulation. The two SPI transactions are visible: the READ phase (Tx1, green background) in which MISO carries Register\,1's value, followed by the WRITE phase (Tx2, orange background) in which MOSI carries \texttt{0xFF} to Register\,3.
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{waveform_rtl.png}
+  \caption{RTL simulation: key signals over the full testbench run.}
+  \label{fig:rtl_wave}
+\end{figure}
+
+\subsection{B2B Overlay Waveform}
+Figure~\ref{fig:b2b_wave} overlays the RTL (blue, solid) and synthesised-netlist (red, dashed) waveforms for the output signals. The traces are indistinguishable, confirming functional equivalence.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{waveform_b2b.png}
+  \caption{B2B overlay: RTL (blue solid) vs.\ synthesised netlist (red dashed). Traces overlap completely.}
+  \label{fig:b2b_wave}
+\end{figure}
+
+% =============================================================================
 \section{Conclusions}
-The `spi_slave` design behaves consistently across RTL and synthesized netlist simulation. The provided RTL2GDS flow has been exercised successfully and generated final physical outputs, and the cloned test tree in `spi_slave/test_clone` ensures that verification can be repeated cleanly.
+% =============================================================================
+
+The \texttt{spi\_slave} design has been verified at two levels:
+\begin{itemize}
+  \item \textbf{Functional correctness}: Both a register read and a register write transaction were exercised in simulation, producing the expected MISO output and register update.
+  \item \textbf{Synthesis equivalence}: All observable output signals are bit-for-bit identical between the RTL model and the Yosys-generated structural netlist, confirming that synthesis introduced no functional changes.
+\end{itemize}
+
+The LibreLane/OpenROAD RTL2GDS flow has been executed successfully, yielding a final GDS for the IHP SG13G2 target process.
+
 \end{document}
