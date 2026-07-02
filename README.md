@@ -1,7 +1,7 @@
 # spi_slave — SPI Slave IP for IHP SG13G2
 
-A small, synchronous SPI slave IP block implemented in Verilog and taped out
-through the IHP SG13G2 0.13 µm BiCMOS process using the open-source
+A small, synchronous SPI slave IP block implemented in Verilog and converted 
+to GDSII for the IHP SG13G2 0.13 µm BiCMOS process using the open-source
 LibreLane/OpenROAD RTL-to-GDS flow.
 
 **Author:** Koen Van Caekenberghe, ChipDesign B.V.  
