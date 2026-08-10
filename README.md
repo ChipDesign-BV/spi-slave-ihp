@@ -1,17 +1,29 @@
 # spi_slave — SPI Slave IP for IHP SG13G2
 
-A small, synchronous SPI slave IP block implemented in Verilog and converted 
+A small, synchronous SPI slave IP block implemented in Verilog and converted
 to GDSII for the IHP SG13G2 0.13 µm BiCMOS process using the open-source
 LibreLane/OpenROAD RTL-to-GDS flow.
 
-**Author:** Koen Van Caekenberghe, ChipDesign B.V.  
-**License:** Apache 2.0  
-**PDK:** IHP SG13G2  
-**Die area:** 157.78 µm × 176.50 µm  
+**Author:** Koen Van Caekenberghe, ChipDesign B.V.
+**License:** Apache 2.0
+**PDK:** IHP SG13G2
+
+The repository contains two variants:
+
+| Variant | Location | SPI modes | Verified against |
+|---|---|---|---|
+| **Mode 0** (original) | repository root | 0 (CPOL=0, CPHA=0) | generic SPI master model |
+| **All-modes** | [`allmodes/`](allmodes/) | 0–3, selected by `CPOL`/`CPHA` pins | Raspberry Pi (spidev) and Infineon AURIX (QSPI) master models |
+
+Both variants share the register map and FSM; the all-modes variant adds two
+mode-select input pins and generalises the SCK edge handling. See
+[`allmodes/README.md`](allmodes/README.md) for its full documentation, and
+[`verification_report.pdf`](verification_report.pdf) for the combined
+verification and signoff report covering both variants.
 
 ---
 
-## Design overview
+## Design overview (mode-0 variant)
 
 The `spi_slave` module exposes eight 8-bit registers over SPI (Mode 0,
 CPOL=0, CPHA=0) and provides a secondary parallel read port for on-chip
@@ -36,31 +48,23 @@ synchroniser before entering the system-clock domain.
 ## Repository layout
 
 ```
-spi_slave.v                  RTL source
-spi_slave.gds                Final GDS (IHP SG13G2, with seal ring)
+spi_slave.v                  RTL source (mode-0 variant)
+spi_slave.gds                Final GDS (IHP SG13G2 core macro, DRC/LVS clean — see signoff note)
 spi_slave.def                Final DEF
 tb_spi_slave.v               RTL testbench (three SPI transactions: read, write, read-back)
 tb_spi_slave_compare.v       B2B testbench (RTL vs synthesised netlist)
 gen_waveforms.py             VCD parser and waveform PNG generator
 waveform_rtl.png             RTL simulation waveform
 waveform_b2b.png             B2B overlay waveform (RTL vs netlist)
-verification_report.pdf      Compiled verification report (LaTeX)
-verification_report.tex      LaTeX source for the report
-flow/
-  config.yaml                LibreLane flow configuration
-  constraint.sdc             Timing constraints (10 ns system clock)
-  run_flow.sh                Flow entry point
-  ihp_pdk.env.example        PDK environment template
-  Makefile                   LibreLane/OpenROAD make targets
-  spi_slave_synth.v          Yosys-generated structural netlist
-  spi_slave_synth.json       Synthesis statistics
-  synth.ys                   Yosys synthesis script (standalone)
-  place_route.tcl            OpenROAD fallback placement script
+verification_report.pdf      Combined verification & signoff report (both variants)
+report/                      Report source (Markdown, ChipDesign pandoc template)
+flow/                        LibreLane flow configuration (see flow/README.md)
+allmodes/                    All-modes variant: RTL, host testbenches, flow, GDS
 ```
 
 ---
 
-## RTL simulation
+## RTL simulation (mode-0 variant)
 
 Requires [Icarus Verilog](https://steveicarus.github.io/iverilog/) ≥ 11.
 
@@ -117,44 +121,32 @@ cp ihp_pdk.env.example ihp_pdk.env
 ./run_flow.sh
 ```
 
-The flow runs 69 LibreLane/OpenROAD steps (synthesis → floorplan → placement
-→ CTS → global routing → detailed routing → RCX → STA → GDS stream-out →
-seal-ring insertion).  Final outputs land in
-`flow/runs/<RUN_DATE>/final/`.
+The flow runs the LibreLane Classic flow (70 steps with LibreLane v3:
+synthesis → floorplan → placement → CTS → routing → RCX → STA → GDS
+stream-out). Final outputs land in `flow/runs/<RUN_DATE>/final/`. See
+`flow/README.md` for LibreLane-version notes.
 
-### Tested environment
-
-Verified inside the **IIC-OSIC-TOOLS** Docker/WSL2 container
-(image tag `2025.12` or later):
-
-| Tool | Version |
-|---|---|
-| LibreLane | 1.x |
-| OpenROAD | 2.x |
-| Yosys | ≥ 0.40 |
-| KLayout | 0.30.x |
-| IHP PDK | ihp-sg13g2 (open release) |
-
-> **Note:** A bug in the librelane `ihp_seal_ring.py` script (use of the
-> deprecated `create_cell` KLayout API and missing nm→µm unit conversion)
-> must be patched manually in the installed librelane package — see
-> `flow/README.md` for the exact patch.
-
-### Flow results
+### Flow results (LibreLane v3.1.0, run RUN_2026-08-08_22-27-58)
 
 | Metric | Value |
 |---|---|
 | Die size | 157.78 µm × 176.50 µm |
-| Final GDS | `spi_slave.gds` (803 KiB, seal ring included) |
-| Final DEF | `spi_slave.def` (624 KiB) |
-| Antenna check | Pass |
-| LVS | Pass |
-| DRC | Skipped (KLayout and Magic DRC disabled in config) |
-| Timing | No setup/hold violations reported |
+| Setup / hold WNS, TNS | 0 / 0 at all corners (ss 1.08 V 125 °C, tt 1.20 V 25 °C, ff 1.32 V −40 °C) |
+| Routing DRC | 0 errors |
+| Antenna check | 0 violations |
+| LVS (Netgen) | Pass — circuits match uniquely (597 devices / 608 nets) |
+| Signoff DRC (IHP KLayout deck) | Clean apart from 8 chip-level density/filler markers (foundry fill resolves at tapeout) |
+
+> **Signoff note:** `spi_slave.gds` is the **core macro without seal ring**.
+> The seal ring previously included in this file (inserted by the LibreLane
+> `KLayout.SealRing` step) was found to be defective — it overlapped the
+> routed core and carried a full-die `EdgeSeal` marker, failing the IHP
+> signoff DRC deck with >21k violations. A seal ring must be added correctly
+> at chip assembly. Full analysis in `verification_report.pdf`.
 
 ---
 
-## Verification results
+## Verification results (mode-0 variant)
 
 All output signals are bit-for-bit identical between RTL and synthesised netlist:
 
@@ -178,7 +170,12 @@ All output signals are bit-for-bit identical between RTL and synthesised netlist
 
 ![B2B overlay: RTL (blue) vs synthesised netlist (red dashed) — traces overlap completely](waveform_b2b.png)
 
-See `verification_report.pdf` for full analysis.
+The all-modes variant is additionally verified in all four SPI modes against
+Raspberry Pi and AURIX QSPI master models, on RTL and synthesised netlist —
+see [`allmodes/README.md`](allmodes/README.md).
+
+See `verification_report.pdf` for the full combined analysis, including the
+standalone signoff DRC/LVS investigation.
 
 ---
 
