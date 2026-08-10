@@ -1,0 +1,8 @@
+08-Aug-2026 22:28:18 | INFO    | KLayout version detected: 0.30.9 (required >= 0.30.5)
+08-Aug-2026 22:28:18 | INFO    | Using DRC JSON file: /foss/pdks/ihp-sg13g2/libs.tech/klayout/python/sg13g2_pycell_lib/sg13g2_tech_mod.json
+08-Aug-2026 22:37:16 | ERROR   | ==================================================================================
+08-Aug-2026 22:37:16 | ERROR   | ❌ --- KLayout DRC Check Failed: Violations were detected in the layout. --- ❌
+08-Aug-2026 22:37:16 | ERROR   | ==================================================================================
+08-Aug-2026 22:37:16 | ERROR   | Violated rules are : {'V2.c1', 'Seal.b_metal5', 'M2.d', 'pSD.c', 'pSD.b', 'Seal.d.TopVia2', 'Seal.c1.Via2', 'M3.j', 'TM1.c', 'M1.d', 'V1.a', 'M1.b', 'M3.e', 'CntB.f', 'Act.e', 'CntB.a1', 'TM2.b', 'CntB.j', 'M4.d', 'Act.c', 'M2.c1', 'M1.e', 'Seal.c1.Via1', 'M2.b', 'V2.a', 'Seal.d.Via1', 'M4.j', 'pSD.i', 'M5.d', 'TM2.c', 'Gat.f', 'CntB.b2', 'NW.c', 'Seal.d.Cont', 'Seal.b_metal2', 'Seal.c1.Via3', 'CntB.a', 'Seal.d.Via4', 'Seal.d.TopVia1', 'Seal.d.Via2', 'Gat.d', 'V3.a', 'M2.e', 'Seal.c', 'CntB.h1', 'Gat.a1', 'Cnt.g1', 'M5.j', 'Act.b', 'AFil.g', 'Seal.b_metal4', 'Cnt.e', 'Cnt.j', 'M1.c1', 'NW.f', 'Seal.b_metal1', 'Seal.b_topmetal1', 'Seal.b_topmetal2', 'M3.c1', 'M3.d', 'pSD.d', 'Seal.b_psd', 'pSD.j', 'CntB.b', 'Seal.d.Via3', 'Seal.b_activ', 'LU.a', 'CntB.d', 'M2.j', 'Gat.c', 'Seal.b_metal3', 'M3.b', 'Gat.a2', 'V1.c1', 'M4.b', 'M4.e'}
+
+08-Aug-2026 22:37:16 | INFO    | Total DRC Run time: 537.74 seconds (including execution, analysis, and reporting)
