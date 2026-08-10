@@ -54,34 +54,37 @@ Final GDS and DEF are in `runs/<RUN_DATE>/final/`.
 
 ## Known issues / patches
 
-### KLayout seal ring — librelane API mismatch
+### LibreLane v3: klayout must be on the login-shell PATH
 
-`librelane` ≤ 1.x ships an `ihp_seal_ring.py` that calls
-`layout.create_cell("sealring", "SG13_dev", params)`.  This API works only
-for native KLayout PCells; the IHP PDK registers its seal ring via a
-`cni.dlo.PCellWrapper`, which requires `add_pcell_variant` instead.  The
-script also passes die dimensions in database units (nm) where the PCell
-expects µm.
+The Makefile invokes LibreLane through `bash -lc`, so the PATH comes from
+`ihp_pdk.env` only. The `KLayout.SealRing` step spawns the `klayout` binary
+directly; if it is not on that PATH the flow dies at step ~66 with
+`FileNotFoundError: [Errno 2] No such file or directory: 'klayout'`.
+`ihp_pdk.env.example` therefore includes the klayout directory in its PATH
+line. A failed run can be resumed without redoing PnR:
 
-If you encounter:
-
+```bash
+librelane config.yaml --pdk $PDK --pdk-root $PDK_ROOT --manual-pdk \
+  --last-run --from KLayout.SealRing
 ```
-AttributeError: 'NoneType' object has no attribute 'cell_index'
-```
 
-at step KLayout.SealRing, patch the installed script
-(`site-packages/librelane/scripts/klayout/ihp_seal_ring.py`) as follows:
+### LibreLane v3: KLayout.SealRing output is defective — do not use it
 
-1. Change `layout = pya.Layout()` → `layout = pya.Layout(True)`
-2. Replace the `create_cell` block with:
-   ```python
-   lib = pya.Library.library_by_name("SG13_dev", "sg13g2")
-   pcell_decl = lib.layout().pcell_declaration("sealring")
-   p = pcell_decl.params_as_hash(pcell_decl.get_parameters())
-   edge_box = float(re.sub(r"[a-zA-Z]+", "", p["edgeBox"].default))
-   die_w_um = die_width / 1000.0 - edge_box * 2
-   die_h_um = die_height / 1000.0 - edge_box * 2
-   params = {"l": f"{die_w_um:.6f}u", "w": f"{die_h_um:.6f}u"}
-   sealring_pcell_i = layout.add_pcell_variant(lib, pcell_decl.id(), params)
-   ```
-3. Add `import re` at the top of the file.
+With LibreLane v3.1.0 the seal-ring step runs to completion but produces a
+broken ring: it is sized `die − 64.4 µm`, inset 32.2 µm into the die (so it
+physically overlaps the routed core on Activ/pSD/Metal1/Cont), and its
+`EdgeSeal` (39/4) marker is a full-die box instead of the ring annulus,
+which makes the IHP signoff DRC deck classify the entire chip as seal-ring
+structures (>15k violation markers). The repository's `spi_slave.gds` is
+therefore the pre-seal-ring KLayout stream-out
+(`runs/<RUN>/final/klayout_gds/`), which passes the IHP signoff deck apart
+from the usual chip-level density/filler checks. Add the seal ring at chip
+assembly instead. Full analysis: `../verification_report.pdf`.
+
+### Historical note (librelane ≤ 1.x)
+
+Older librelane releases shipped an `ihp_seal_ring.py` with a
+`create_cell`/PCell API mismatch and an nm-vs-µm unit bug that crashed the
+step with `AttributeError: 'NoneType' object has no attribute 'cell_index'`.
+That patch is obsolete with LibreLane v3, which drives the seal ring through
+the PDK-provided `KLAYOUT_SEALRING_SCRIPT`.
