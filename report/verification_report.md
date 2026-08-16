@@ -10,8 +10,8 @@ logo: "ChipDesign_logo.png"
 # Scope and summary
 
 This report documents the verification and physical signoff of the
-`spi_slave` IP block for the IHP SG13G2 0.13 µm BiCMOS open PDK, in its two
-variants:
+`spi_slave` IP block for the IHP SG13G2 0.13 µm BiCMOS open PDK [1], in its
+two variants:
 
 * **Mode-0 variant** (repository root) — SPI mode 0 only (CPOL=0, CPHA=0).
 * **All-modes variant** (`allmodes/`) — SPI modes 0–3, selected by two
@@ -106,7 +106,7 @@ implemented $f_{Clk} = 100$ MHz this permits $f_{SCK} \leq 12.5$ MHz.
 
 ## Mode-0 variant
 
-Testbench `tb_spi_slave.v` (Icarus Verilog ≥ 11) executes three
+Testbench `tb_spi_slave.v` (Icarus Verilog [8] ≥ 11) executes three
 transactions: Tx1 reads Register 1 (expects reset value 0x0B), Tx2 writes
 0xFF to Register 3, Tx3 reads Register 3 back. Result:
 
@@ -154,7 +154,7 @@ in total, all passing), with the DUT clocked at its implemented 100 MHz.
 ## Raspberry Pi master model
 
 `tb_spi_slave_rpi.v` models the BCM283x/BCM2711 SPI controller as driven by
-spidev's `xfer2()`: CE0 asserted for the whole 2-byte buffer with about one
+spidev's [12] `xfer2()`: CE0 asserted for the whole 2-byte buffer with about one
 SCK period of setup, bytes clocked back-to-back with no inter-byte gap, MSB
 first, 10 MHz SCK. Per mode it checks: register read (0x0B), write +
 read-back (0x5A), the parallel port, an out-of-range address read (0xFF) and
@@ -166,7 +166,7 @@ PASS: Raspberry Pi master model — all checks passed in all 4 SPI modes
 
 ## AURIX QSPI master model
 
-`tb_spi_slave_aurix.v` models an AURIX (TC2xx/TC3xx) QSPI channel: SLSO lead
+`tb_spi_slave_aurix.v` models an AURIX (TC2xx/TC3xx) QSPI channel [13]: SLSO lead
 and trail delays and an inter-word idle of one SCLK period each (SLSO held
 asserted across the frame), 12.5 MHz SCLK — deliberately at the
 $f_{Clk}/8$ limit to demonstrate margin. Per mode it performs a full
@@ -193,8 +193,9 @@ keep $f_{SCK} \leq f_{Clk}/8$.
 
 # RTL-to-GDS implementation (1.2 V, `sg13g2_stdcell`)
 
-Both variants were taken through the LibreLane v3.1.0 Classic flow
-(70 steps) on the IHP SG13G2 open PDK's thin-oxide standard cell library,
+Both variants were taken through the LibreLane [2] v3.1.0 Classic flow
+(70 steps, Yosys [4] synthesis, OpenROAD [3] place-and-route) on the IHP
+SG13G2 open PDK's thin-oxide standard cell library,
 with a 10 ns system clock constraint. Timing is analysed at three corners:
 slow 1.08 V 125 °C, typical 1.20 V 25 °C, fast 1.32 V −40 °C.
 
@@ -212,7 +213,9 @@ slow 1.08 V 125 °C, typical 1.20 V 25 °C, fast 1.32 V −40 °C.
 | Routed wirelength | — | 21.2 mm |
 | Total power (tt, 1.2 V, 25 °C) | — | ≈ 1.08 mW |
 
-![All-modes variant — final routed layout (LibreLane render)](../allmodes/layout_render.png)
+![Mode-0 variant, 1.2 V `sg13g2_stdcell` — final routed layout, 157.78 µm × 176.50 µm (KLayout render, IHP layer styles)](layout_m0_lv.png)
+
+![All-modes variant, 1.2 V `sg13g2_stdcell` — final routed layout, 160.61 µm × 179.33 µm](layout_am_lv.png)
 
 ---
 
@@ -220,8 +223,8 @@ slow 1.08 V 125 °C, typical 1.20 V 25 °C, fast 1.32 V −40 °C.
 
 ## LVS
 
-LVS is performed by the flow's signoff stage: Magic extracts a SPICE netlist
-from the final layout, and Netgen compares it against the post-PnR powered
+LVS is performed by the flow's signoff stage: Magic [6] extracts a SPICE
+netlist from the final layout, and Netgen [7] compares it against the post-PnR powered
 Verilog netlist mapped to the PDK SPICE libraries.
 
 | Design | Devices (layout = netlist) | Nets (layout = netlist) | Verdict |
@@ -234,7 +237,7 @@ runs.
 
 ## DRC methodology
 
-Signoff DRC uses the IHP SG13G2 KLayout rule deck
+Signoff DRC uses the IHP SG13G2 KLayout [5] rule deck
 (`$PDK_ROOT/ihp-sg13g2/libs.tech/klayout/tech/drc/run_drc.py`), full rule
 set, deep mode, identical invocation for every run — violation counts from
 different invocations of this deck are not comparable, so a fixed harness is
@@ -300,9 +303,10 @@ the resume procedure are documented in `flow/README.md`.
 
 # Thick-oxide (3.3 V) implementation
 
-Both variants were re-implemented on **`sg13g2_stdcell_hv`**, a thick-oxide
-3.3 V rebuild of the IHP standard cells (a sibling repository with its own
-generation and sign-off report), through the same LibreLane v3.1.0 Classic
+Both variants were re-implemented on **`sg13g2_stdcell_hv`** [10], a
+thick-oxide 3.3 V rebuild of the IHP standard cells (a sibling repository
+with its own generation and sign-off report), through the same LibreLane
+v3.1.0 Classic
 flow at the same 10 ns clock. The flows live in `flow_hv/` and
 `allmodes/flow_hv/`; the signoff GDS/DEF and their DRC runs in
 `signoff_hv/` and `allmodes/signoff_hv/`.
@@ -359,7 +363,11 @@ library's own DRC harness never built. The fix (site-centred rail-tap
 grid) and the regression harness live in the library repository; both
 builds were re-run on the fixed library. The full analysis is the
 library's companion report, *The Shared-Rail Contact Clash in
-sg13g2_stdcell_hv*.
+sg13g2_stdcell_hv* [11].
+
+![Mode-0 variant, 3.3 V `sg13g2_stdcell_hv` — final routed layout, 354.38 µm × 399.98 µm. Note the 7.14 µm rows and coarser fabric of the thick-oxide cells.](layout_m0_hv.png)
+
+![All-modes variant, 3.3 V `sg13g2_stdcell_hv` — final routed layout, 354.01 µm × 399.61 µm](layout_am_hv.png)
 
 ## Comparing the two libraries
 
@@ -384,8 +392,8 @@ zero slack violations, so the SPI-side constraint is identical
 ($f_{SCK} \leq f_{Clk}/8 = 12.5$ MHz), and the lower utilisation of the
 thick-oxide builds is headroom, not congestion (routing closes with zero
 DRC at 35–36 %). What the 3.3 V build buys is native 3.3 V I/O — direct
-connection to the Raspberry Pi and AURIX hosts with no level shifting —
-at the price of single-corner timing sign-off and no power numbers, both
+connection to the Raspberry Pi and AURIX hosts with no level shifting — at
+the price of single-corner timing sign-off and no power numbers, both
 library limitations rather than flow limitations.
 
 ---
@@ -416,3 +424,38 @@ library limitations rather than flow limitations.
   wrong `EdgeSeal` marker) and its output is excluded from the
   deliverables. Seal-ring insertion, dummy fill, and final chip-level DRC
   remain tapeout-assembly tasks.
+
+---
+
+# References
+
+1. IHP Microelectronics, *IHP-Open-PDK — SG13G2 open source PDK*,
+   [github.com/IHP-GmbH/IHP-Open-PDK](https://github.com/IHP-GmbH/IHP-Open-PDK).
+2. *LibreLane* (open RTL-to-GDS flow, v3.1.0),
+   [github.com/librelane/librelane](https://github.com/librelane/librelane).
+3. The OpenROAD Project, *OpenROAD* and *OpenSTA*,
+   [github.com/The-OpenROAD-Project](https://github.com/The-OpenROAD-Project).
+4. C. Wolf et al., *Yosys Open SYnthesis Suite*,
+   [yosyshq.net](https://yosyshq.net).
+5. M. Köfferlein, *KLayout*, [klayout.de](https://www.klayout.de).
+6. R. T. Edwards et al., *Magic VLSI layout tool*,
+   [opencircuitdesign.com/magic](http://opencircuitdesign.com/magic).
+7. R. T. Edwards, *Netgen LVS*,
+   [opencircuitdesign.com/netgen](http://opencircuitdesign.com/netgen).
+8. S. Williams, *Icarus Verilog*,
+   [steveicarus.github.io/iverilog](https://steveicarus.github.io/iverilog).
+9. H. Pretl et al., *IIC-OSIC-TOOLS* (reference container environment),
+   [github.com/iic-jku/IIC-OSIC-TOOLS](https://github.com/iic-jku/IIC-OSIC-TOOLS).
+10. ChipDesign B.V., *sg13g2_stdcell_hv — Generation of a Thick-Oxide
+    (3.3 V) Standard Cell Library*, sibling repository and report
+    (`doc/report/`), 2026.
+11. ChipDesign B.V., *The Shared-Rail Contact Clash in sg13g2_stdcell_hv*,
+    companion report distributed alongside the library, 2026.
+12. *python3-spidev* (Linux spidev userspace bindings),
+    [github.com/doceme/py-spidev](https://github.com/doceme/py-spidev);
+    Raspberry Pi BCM283x/BCM2711 peripherals documentation,
+    [raspberrypi.com/documentation](https://www.raspberrypi.com/documentation/).
+13. Infineon Technologies AG, *AURIX TC3xx User's Manual* (QSPI chapter)
+    and *iLLD — Infineon Low Level Drivers*,
+    [infineon.com](https://www.infineon.com). AURIX and Infineon are
+    trademarks of Infineon Technologies AG; used here nominatively.
