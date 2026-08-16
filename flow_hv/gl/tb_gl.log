@@ -1,0 +1,4 @@
+VCD info: dumpfile tb_spi_slave_synth.vcd opened for output.
+FINISH 110000: miso_rx1=0x0b data=0xff miso_rx3=0xff debug=0x1f
+PASS: all checks passed
+../tb_spi_slave_compare.v:145: $finish called at 120000 (10ps)
