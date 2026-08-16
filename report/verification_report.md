@@ -1,9 +1,9 @@
 ---
 title: "SPI Slave IP for IHP SG13G2 — Verification & Signoff Report"
-subtitle: "Mode-0 and all-modes (CPOL/CPHA) variants · RTL, host-level, RTL-to-GDS, DRC and LVS"
+subtitle: "Mode-0 and all-modes (CPOL/CPHA) variants · 1.2 V (`sg13g2_stdcell`) and 3.3 V (`sg13g2_stdcell_hv`) implementations · RTL, host-level, RTL-to-GDS, DRC and LVS"
 author:
   - "Koen Van Caekenberghe, Ph.D. — ChipDesign B.V. — [info@chipdesign.be](mailto:info@chipdesign.be)"
-date: "2026-08-09"
+date: "2026-08-16 (rev. 2: thick-oxide implementations added)"
 logo: "ChipDesign_logo.png"
 ---
 
@@ -18,7 +18,10 @@ variants:
   configuration pins `CPOL`/`CPHA`; designed to interface both a Raspberry
   Pi (spidev master) and an Infineon AURIX microcontroller (QSPI master).
 
-All verification steps pass for both variants:
+Each variant is implemented **twice**: on the PDK's 1.2 V thin-oxide
+library `sg13g2_stdcell` (sections 5–7) and on the 3.3 V thick-oxide
+library `sg13g2_stdcell_hv` (section 8), for four GDS deliverables in
+total. All verification steps pass for both variants and both libraries:
 
 | Verification step | Mode-0 variant | All-modes variant |
 |---|---|---|
@@ -26,11 +29,14 @@ All verification steps pass for both variants:
 | B2B RTL vs. synthesised netlist | pass, bit-identical | pass, bit-identical (all 4 modes) |
 | Raspberry Pi master model (RTL + netlist) | n/a | pass (all 4 modes) |
 | AURIX QSPI master model, full register sweep (RTL + netlist) | n/a | pass (all 4 modes) |
-| RTL-to-GDS flow (LibreLane v3.1.0 Classic, 70 steps) | complete | complete |
-| Static timing (3 corners, setup + hold) | 0 violations | 0 violations |
-| Antenna check | 0 violations | 0 violations |
-| LVS (Magic extraction + Netgen) | match uniquely | match uniquely |
-| Signoff DRC, IHP KLayout full deck (core macro) | clean¹ | clean¹ |
+| RTL-to-GDS flow, 1.2 V (LibreLane v3.1.0 Classic, 70 steps) | complete | complete |
+| Static timing, 1.2 V (3 corners, setup + hold) | 0 violations | 0 violations |
+| RTL-to-GDS flow, 3.3 V (`sg13g2_stdcell_hv`) | complete | complete |
+| Static timing, 3.3 V (typical corner, setup + hold) | 0 violations | 0 violations |
+| Gate-level simulation, 3.3 V netlist | pass | pass (all 4 modes) |
+| Antenna check (both libraries) | 0 violations | 0 violations |
+| LVS (both libraries) | match uniquely | match uniquely |
+| Signoff DRC, IHP KLayout full deck (all four core macros) | clean¹ | clean¹ |
 
 ¹ Apart from eight single-marker chip-level metal-density and filler-presence
 checks that fire on any unfilled macro (section 6.3); these are resolved by
@@ -185,12 +191,12 @@ keep $f_{SCK} \leq f_{Clk}/8$.
 
 ---
 
-# RTL-to-GDS implementation
+# RTL-to-GDS implementation (1.2 V, `sg13g2_stdcell`)
 
 Both variants were taken through the LibreLane v3.1.0 Classic flow
-(70 steps) on the IHP SG13G2 open PDK, with a 10 ns system clock
-constraint. Timing is analysed at three corners: slow 1.08 V 125 °C,
-typical 1.20 V 25 °C, fast 1.32 V −40 °C.
+(70 steps) on the IHP SG13G2 open PDK's thin-oxide standard cell library,
+with a 10 ns system clock constraint. Timing is analysed at three corners:
+slow 1.08 V 125 °C, typical 1.20 V 25 °C, fast 1.32 V −40 °C.
 
 | Metric | Mode-0 variant | All-modes variant |
 |---|---|---|
@@ -292,6 +298,98 @@ the resume procedure are documented in `flow/README.md`.
 
 ---
 
+# Thick-oxide (3.3 V) implementation
+
+Both variants were re-implemented on **`sg13g2_stdcell_hv`**, a thick-oxide
+3.3 V rebuild of the IHP standard cells (a sibling repository with its own
+generation and sign-off report), through the same LibreLane v3.1.0 Classic
+flow at the same 10 ns clock. The flows live in `flow_hv/` and
+`allmodes/flow_hv/`; the signoff GDS/DEF and their DRC runs in
+`signoff_hv/` and `allmodes/signoff_hv/`.
+
+## Flow adaptations
+
+Every deviation from the thin-oxide flow is a consequence of the library,
+documented at the point of use in `flow_hv/config.yaml`:
+
+* **Flip-flop mapping** (`hv_dff_map.v`): `sg13g2_hv_sdfbbp_1` is the only
+  flip-flop with layout; the four flavours the RTL produces map onto it
+  with the scan mux reused as the clock-enable mux. Gate-level simulation
+  (`verify_gl.sh`) is what proves this mapping right.
+* **Excluded cells**: 12 characterised-but-unlaid-out flip-flops/latches,
+  plus `sg13g2_hv_nand4_1` (its B pin has no routing track through it).
+* **Metal1 routing** (`RT_MIN_LAYER: Metal1`): 25 library pins sit off the
+  0.48 µm vertical track grid, and the router needs Metal1 jogs to reach
+  them.
+* **No preventive antenna diodes**: the heuristic pass placed 1 088
+  diodes the design does not need (~20 % of the std-cell area); targeted
+  repair on the nets that need it keeps the antenna check at zero.
+* **Rails-only fillers**: fillers are inserted after routing, and the
+  decap cells' Metal1 straps are invisible to the router — with Metal1
+  routing they can land inside the 0.18 µm Metal1 spacing of a routed
+  wire. The `fill_*` cells carry Metal1 only on the rails.
+* **One timing corner** (typical, 3.30 V, 25 °C): the library is
+  characterised nowhere else, and it carries no internal-power tables, so
+  power is not reported.
+
+## Results
+
+| Metric | Mode-0 variant | All-modes variant |
+|---|---|---|
+| Flow run | RUN_2026-08-16_13-42-07 | RUN_2026-08-16_13-42-22 |
+| Die size | 354.38 µm × 399.98 µm | 354.01 µm × 399.61 µm |
+| Std-cell area | 41 678 µm² | 41 630 µm² |
+| Std-cell utilisation | 35.5 % | 36.2 % |
+| Setup / hold WNS (typ 3.3 V 25 °C) | 0 / 0 | 0 / 0 |
+| Detailed-routing DRC / antenna | 0 / 0 | 0 / 0 |
+| Max slew / cap / fanout violations | 0 / 0 / 0 | 0 / 0 / 0 |
+| LVS (Netgen) | match uniquely | match uniquely |
+| Gate-level simulation | pass | pass, all 4 SPI modes |
+| Signoff DRC (full IHP deck) | clean¹ | clean¹ |
+
+Gate-level simulation runs the RTL testbenches against the synthesised
+`sg13g2_hv_*` netlist using zero-delay functional models of the library
+cells — the check that proves the non-standard flip-flop mapping.
+
+The first signoff DRC of these builds reported ~19 000 `Cnt`/`CntB`
+markers, which traced not to the flow but to a defect in the library
+itself: rail-tap contacts at cell-specific x positions, merging illegally
+wherever two *different* cells share a power rail — a geometry the
+library's own DRC harness never built. The fix (site-centred rail-tap
+grid) and the regression harness live in the library repository; both
+builds were re-run on the fixed library. The full analysis is the
+library's companion report, *The Shared-Rail Contact Clash in
+sg13g2_stdcell_hv*.
+
+## Comparing the two libraries
+
+| | Mode-0, 1.2 V | Mode-0, 3.3 V | All-modes, 1.2 V | All-modes, 3.3 V |
+|---|---|---|---|---|
+| Library | `sg13g2_stdcell` | `sg13g2_stdcell_hv` | `sg13g2_stdcell` | `sg13g2_stdcell_hv` |
+| Row height / tracks | 3.78 µm / 9 | 7.14 µm / 17 | 3.78 µm / 9 | 7.14 µm / 17 |
+| Die size (µm) | 157.78 × 176.50 | 354.38 × 399.98 | 160.61 × 179.33 | 354.01 × 399.61 |
+| Die area | 27 848 µm² | 141 745 µm² (**5.1×**) | 28 802 µm² | 141 462 µm² (**4.9×**) |
+| Std-cell area | 11 284 µm² | 41 678 µm² (**3.7×**) | 11 737 µm² | 41 630 µm² (**3.5×**) |
+| Utilisation | 53.8 % | 35.5 % | 53.5 % | 36.2 % |
+| Clock closed | 100 MHz | 100 MHz | 100 MHz | 100 MHz |
+| Timing corners | 3 (ss/tt/ff) | 1 (typ only) | 3 | 1 |
+| Total power (tt) | ≈ 1.01 mW @ 1.2 V | not characterised | ≈ 1.08 mW @ 1.2 V | not characterised |
+| Signoff DRC | clean¹ | clean¹ | clean¹ | clean¹ |
+
+The ~3.6× cell-area and ~5× die-area cost of the 3.3 V build follows
+directly from the library geometry — 1.89× taller rows and 2.40× wider
+PMOS — not from the design: cell count and netlist structure are
+essentially unchanged. Both libraries close the same 100 MHz clock with
+zero slack violations, so the SPI-side constraint is identical
+($f_{SCK} \leq f_{Clk}/8 = 12.5$ MHz), and the lower utilisation of the
+thick-oxide builds is headroom, not congestion (routing closes with zero
+DRC at 35–36 %). What the 3.3 V build buys is native 3.3 V I/O — direct
+connection to the Raspberry Pi and AURIX hosts with no level shifting —
+at the price of single-corner timing sign-off and no power numbers, both
+library limitations rather than flow limitations.
+
+---
+
 # Conclusions
 
 * Both `spi_slave` variants are functionally verified at RTL and against
@@ -299,12 +397,21 @@ the resume procedure are documented in `flow/README.md`.
   in all four SPI modes against Raspberry Pi and AURIX QSPI master models,
   including a full register-map sweep at the maximum-rated SCK of
   $f_{Clk}/8$.
-* Both variants complete the LibreLane v3 RTL-to-GDS flow with zero timing,
-  antenna and routing violations, and pass Netgen LVS with uniquely matching
-  circuits.
-* Both core macros pass the IHP SG13G2 signoff DRC deck; the only residual
-  markers are the expected chip-level density/filler checks common to all
-  unfilled macros.
+* Both variants complete the LibreLane v3 RTL-to-GDS flow **on both
+  standard-cell libraries** — 1.2 V `sg13g2_stdcell` and 3.3 V
+  `sg13g2_stdcell_hv` — with zero timing, antenna and routing violations,
+  and pass Netgen LVS with uniquely matching circuits; the thick-oxide
+  netlists additionally pass gate-level simulation, proving the
+  non-standard flip-flop mapping.
+* All four core macros pass the IHP SG13G2 signoff DRC deck; the only
+  residual markers are the expected chip-level density/filler checks
+  common to all unfilled macros. The thick-oxide signoff surfaced, and
+  drove the fix of, a shared-rail contact defect in the cell library
+  (section 8.2).
+* The thick-oxide build costs ~3.6× the cell area and ~5× the die area for
+  the same 100 MHz closure, and buys native 3.3 V I/O toward both target
+  hosts; its sign-off is weaker only where the library is (one timing
+  corner, no power tables).
 * The LibreLane v3 `KLayout.SealRing` step is defective (core overlap +
   wrong `EdgeSeal` marker) and its output is excluded from the
   deliverables. Seal-ring insertion, dummy fill, and final chip-level DRC

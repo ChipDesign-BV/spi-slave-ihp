@@ -133,3 +133,7 @@ pre {
 @media print {
   body { max-width: none; margin: 0; padding: 0; }
 }
+
+/* Figures must never overflow the text block (WeasyPrint does not clip). */
+p > img, figure img { max-width: 100%; height: auto; }
+tr { break-inside: avoid; }
