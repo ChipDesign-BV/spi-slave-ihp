@@ -1,0 +1,154 @@
+meta:
+  version: 2
+  flow: Classic
+  substituting_steps:
+    +OpenROAD.GlobalRouting: Odb.InsertECODiodes
+    +OpenROAD.CTS: Odb.InsertECOBuffers
+    KLayout.XOR: null
+    OpenROAD.STAPrePNR: null
+    OpenROAD.STAMidPNR*: null
+    Checker.IllegalOverlap: null
+    Checker.YosysSynthChecks: null
+    Checker.SetupViolations: null
+    Magic.WriteLEF: null
+    Odb.CheckDesignAntennaProperties: null
+    KLayout.DRC: null
+    Magic.DRC: null
+
+DESIGN_NAME: spi_slave
+VERILOG_FILES:
+- dir::../spi_slave.v
+VERILOG_INCLUDE_DIRS: []
+VERILOG_DEFINES:
+- FUNCTIONAL
+
+PNR_SDC_FILE: dir::constraint.sdc
+SIGNOFF_SDC_FILE: dir::constraint.sdc
+FALLBACK_SDC: dir::constraint.sdc
+
+# ---------------------------------------------------------------------------
+# Thick-oxide (3.3 V) standard cell library
+#
+# sg13g2_stdcell_hv is not installed in the PDK tree, so every view the flow
+# needs is pointed at a sibling checkout of the library repository:
+#
+#     <parent>/spi-slave-ihp/flow_hv/config.yaml   <- this file
+#     <parent>/sg13g2_stdcell_hv/                  <- the library
+#
+# `dir::` resolves relative to this file.
+# ---------------------------------------------------------------------------
+CELL_LIBS:
+  "*": dir::../../sg13g2_stdcell_hv/lib/sg13g2_stdcell_hv_typ_3p30V_25C.lib
+CELL_LEFS:
+- dir::../../sg13g2_stdcell_hv/lef/sg13g2_stdcell_hv.lef
+CELL_GDS:
+- dir::../../sg13g2_stdcell_hv/gds/sg13g2_stdcell_hv.gds
+CELL_VERILOG_MODELS:
+- dir::../../sg13g2_stdcell_hv/verilog/sg13g2_stdcell_hv.v
+CELL_SPICE_MODELS:
+- dir::../../sg13g2_stdcell_hv/spice/sg13g2_stdcell_hv.spice
+CELL_CDLS:
+- dir::../../sg13g2_stdcell_hv/cdl/sg13g2_stdcell_hv.cdl
+
+# The library is characterised at one corner only (typical, 3.30 V, 25 C),
+# so timing is signed off there. This is weaker than the three-corner signoff
+# the thin-oxide flow gets and is called out in the report.
+STA_CORNERS:
+- nom_typ_3p30V_25C
+DEFAULT_CORNER: nom_typ_3p30V_25C
+TIMING_VIOLATION_CORNERS:
+- "*"
+
+# 17-track site, 7.14 um rows (thin-oxide CoreSite is 3.78 um)
+PLACE_SITE: CoreSiteHV
+FP_TRACKS_INFO: dir::tracks.info
+
+# ---------------------------------------------------------------------------
+# Cell roles
+# ---------------------------------------------------------------------------
+SYNTH_DRIVING_CELL: sg13g2_hv_buf_4/X
+SYNTH_CLK_DRIVING_CELL: sg13g2_hv_buf_4/X
+SYNTH_BUFFER_CELL: sg13g2_hv_buf_1/A/X
+SYNTH_TIEHI_CELL: sg13g2_hv_tiehi/L_HI
+SYNTH_TIELO_CELL: sg13g2_hv_tielo/L_LO
+OUTPUT_CAP_LOAD: 6.0
+
+FILL_CELLS:
+- sg13g2_hv_fill_1
+- sg13g2_hv_fill_2
+- sg13g2_hv_fill_4
+- sg13g2_hv_fill_8
+# Decap fillers are left out. Fill insertion runs after detailed routing,
+# and this flow routes on Metal1 (RT_MIN_LAYER, see below) -- the decap
+# cells' tall Metal1 strap polygons are invisible to the router, so an
+# inserted decap can land with its strap arbitrarily close to a routed
+# Metal1 wire (observed: 20 M1.b spacing markers, 0.085-0.175 um). The
+# fill_* cells carry Metal1 only on the rails and cannot clash.
+# (DECAP_CELLS is non-optional, so it is pointed at fill cells instead.)
+DECAP_CELLS:
+- sg13g2_hv_fill_8
+- sg13g2_hv_fill_4
+CELL_PAD_EXCLUDE:
+- sg13g2_hv_fill_*
+- sg13g2_hv_decap_*
+DIODE_CELL: sg13g2_hv_antennanp/A
+
+CTS_ROOT_BUFFER: sg13g2_hv_buf_16
+CTS_CLK_BUFFERS:
+- sg13g2_hv_buf_8
+- sg13g2_hv_buf_4
+- sg13g2_hv_buf_2
+
+# The library has no tri-state cell that is both characterised and laid out,
+# so tri-state mapping is disabled: a tri-state in the RTL must fail loudly
+# rather than map to a cell that cannot be placed. Same for latches - the
+# only laid-out latch (dlhrq_1) has a reset pin the generic map does not
+# drive, and neither variant of this design infers a latch.
+SYNTH_TRISTATE_MAP: null
+SYNTH_LATCH_MAP: null
+SYNTH_MUX_MAP: dir::mux2_map.v
+SYNTH_MUX4_MAP: dir::mux4_map.v
+
+# Flip-flop mapping: see hv_dff_map.v. sg13g2_hv_sdfbbp_1 is the only
+# flip-flop in the library with layout, and dfflibmap cannot use it because
+# its next_state is a scan mux; this maps the four flip-flop flavours the
+# design produces onto it explicitly, ahead of dfflibmap.
+SYNTH_EXTRA_MAPPING_FILE: dir::hv_dff_map.v
+
+# 12 cells are characterised but have no layout - the simple flip-flops and
+# the latches the 1-D retarget had to skip. Excluding them keeps synthesis
+# from choosing a cell that cannot be placed.
+SYNTH_EXCLUDED_CELL_FILE: dir::synth_exclude.cells
+PNR_EXCLUDED_CELL_FILE: dir::pnr_exclude.cells
+
+# ---------------------------------------------------------------------------
+# Floorplan
+#
+# The thick-oxide cells are 1.9x taller and their PMOS is 2.4x wider, so the
+# same RTL needs roughly 3x the cell area of the thin-oxide build. The die is
+# sized from utilisation rather than fixed, and the aspect ratio is kept at 1.
+# ---------------------------------------------------------------------------
+FP_SIZING: relative
+FP_CORE_UTIL: 35
+FP_ASPECT_RATIO: 1
+PL_TARGET_DENSITY_PCT: 45
+GRT_ALLOW_CONGESTION: false
+
+# Let the router onto Metal1. The thin-oxide flow keeps RT_MIN_LAYER at
+# Metal2 because its pins sit on the 0.48 um track grid, so a via from
+# Metal2 always lands on one. The retarget moved this library's pins off
+# that grid -- 25 signal pins have no vertical track through them (see
+# work/grid_align_pins.py in the cell library) -- and with Metal2 as the
+# floor the first run left four nand4_1 B pins unconnected, which LVS caught
+# as split nets. Metal1 access lets the router jog to an off-grid pin.
+RT_MIN_LAYER: Metal1
+
+# Preventive diode insertion is off. It placed 1088 antenna diodes the
+# design does not need -- about a fifth of the std-cell area (the antenna
+# check passes with zero violations either way, because targeted repair
+# still runs on the nets that need it: Odb.InsertECODiodes, above). An
+# earlier note here blamed the diodes for the signoff-DRC ContBar
+# violations; that was wrong -- those came from the library's rail-tap
+# contacts, since re-tiled onto the shared 0.48 um site grid (see
+# sg13g2_stdcell_hv/work/fix_rail_contacts.py).
+RUN_HEURISTIC_DIODE_INSERTION: false
