@@ -1,0 +1,23 @@
+# Cells synthesis and PnR must not choose: characterised in the Liberty
+# file but carrying no layout, so they have no LEF/GDS master and cannot
+# be placed. Regenerate with the lib-minus-LEF difference after any
+# library update.
+sg13g2_hv_dfrbp_1
+sg13g2_hv_dfrbp_2
+sg13g2_hv_dfrbpq_1
+sg13g2_hv_dfrbpq_2
+sg13g2_hv_dlhq_1
+sg13g2_hv_dlhr_1
+sg13g2_hv_dllr_1
+sg13g2_hv_dllrq_1
+sg13g2_hv_sdfrbp_1
+sg13g2_hv_sdfrbp_2
+sg13g2_hv_sdfrbpq_1
+sg13g2_hv_sdfrbpq_2
+#
+# Unroutable pin: nand4_1's B pin (0.24 x 0.24 um at x 1.96-2.20) has no
+# vertical routing track through it and no room to be widened to one
+# without breaking M1.b. Place-and-route leaves it unconnected on some
+# placements, which Netgen reports as a split net. The rest of the
+# library covers the same logic with nand2/nand3 + and gates.
+sg13g2_hv_nand4_1

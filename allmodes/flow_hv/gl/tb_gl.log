@@ -1,0 +1,7 @@
+VCD info: dumpfile tb_spi_slave_synth.vcd opened for output.
+MODE 0 (CPOL=0 CPHA=0) 112000: miso_rx1=0x0b data=0xa0 miso_rx3=0xa0 debug=0x1f
+MODE 1 (CPOL=0 CPHA=1) 224000: miso_rx1=0x0b data=0xa1 miso_rx3=0xa1 debug=0x1f
+MODE 2 (CPOL=1 CPHA=0) 336000: miso_rx1=0x0b data=0xa2 miso_rx3=0xa2 debug=0x1f
+MODE 3 (CPOL=1 CPHA=1) 448000: miso_rx1=0x0b data=0xa3 miso_rx3=0xa3 debug=0x1f
+PASS: all checks passed in all 4 SPI modes
+../tb_spi_slave.v:158: $finish called at 450000 (10ps)

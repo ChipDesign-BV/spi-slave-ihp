@@ -306,6 +306,46 @@ KLayout stream-out; a seal ring must be added correctly at chip assembly.
 
 ---
 
+## Thick-oxide (3.3 V) build
+
+This variant is also implemented on the thick-oxide `sg13g2_stdcell_hv`
+library, in [`flow_hv/`](flow_hv/). The library is expected as a sibling
+checkout of the repository root's parent; `flow_hv/config.yaml` resolves it
+relatively.
+
+```bash
+cd flow_hv
+cp ihp_pdk.env.example ihp_pdk.env
+./run_flow.sh
+./verify_gl.sh      # gate-level simulation, all four SPI modes
+```
+
+| Metric | 1.2 V (thin oxide) | 3.3 V (thick oxide) |
+|---|---|---|
+| Die size | 160.61 × 179.33 µm | 354.0 × 399.6 µm |
+| Std-cell area | 11 737 µm² | 41 630 µm² |
+| Clock | 10 ns (100 MHz) | 10 ns (100 MHz) |
+| Setup / hold WNS | 0 / 0, three corners | 0 / 0, typical corner only |
+| Routing DRC / antenna / LVS | 0 / 0 / clean | 0 / 0 / clean |
+| Signoff DRC (IHP KLayout deck) | clean (density markers only) | clean (density markers only) |
+| Gate-level simulation | pass, 4 modes | pass, 4 modes |
+
+The signoff GDS and its DRC run are in [`signoff_hv/`](signoff_hv/); the
+root README's thick-oxide section explains the two flow-level exclusions
+(antenna-diode heuristic, decap fillers) and the library-level rail-tap
+contact fix that the clean signoff depends on.
+
+Same clock, so the SPI-side limit is unchanged: f_SCK ≤ f_Clk/8 = 12.5 MHz,
+and the Raspberry Pi and AURIX wiring above applies to the 3.3 V build as
+well — with the advantage that the thick-oxide I/O is native 3.3 V, so no
+level shifting is needed toward either host.
+
+The thick-oxide flow needs a non-standard flip-flop mapping, a longer
+excluded-cell list and Metal1 routing; the repository root README explains
+why, and `flow_hv/config.yaml` documents each setting at the point of use.
+
+---
+
 ## License
 
 Copyright 2026 Koen Van Caekenberghe, ChipDesign B.V.
